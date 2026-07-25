@@ -383,11 +383,12 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       CONTEXTO Y DATOS DEL NEGOCIO / OFERTA:
       ${infoNegocio}
 
-      REGLAS DE FORMATO OBLIGATORIAS:
+      REGLAS DE FORMATO OBLIGATORIAS (ESTRICTO):
       - Tono a aplicar: ${instruccionTono}
-      - Longitud: MÁXIMO 2 a 3 oraciones cortas (ideal para WhatsApp).
-      - No uses saludos corporativos excesivamente largos o robóticos.
-      - PROHIBIDO inventar reuniones, citas o llamadas a menos que el cliente lo pida explícitamente en su mensaje. Responde estrictamente al contexto de la conversación actual.
+      - Longitud: MÁXIMO 2 oraciones cortas. Ve al grano de inmediato.
+      - ESTRICTAMENTE PROHIBIDO usar fórmulas corporativas robóticas, frases acartonadas como "¡Un saludo!" al final, ni despedidas corporativas formales de call-center.
+      - Si la cita ya quedó confirmada, responde de forma relajada y casual (Ej: "Listo, nos vemos mañana a las 3 PM por acá. ¡Cualquier cosa me avisas!").
+      - Habla como un asesor experto de carne y hueso conversando por WhatsApp: cercano, fluido, natural y cero robótico.
     `;
 
     // 4. Construir Mensajes para OpenAI mapeando CORRECTAMENTE roles user / assistant
