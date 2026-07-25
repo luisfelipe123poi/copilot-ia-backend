@@ -615,6 +615,27 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
   }
 });
 
+// Ejemplo en Node.js / Express
+app.get('/api/verificar-suscripcion', async (req, res) => {
+  const { id } = req.query; // Puede ser el email del usuario o su licenseKey
+
+  try {
+    // 1. Busca en tu base de datos si el usuario pagó y su suscripción está 'authorized' o 'active'
+    const usuarioBD = await BaseDeDatos.encontrarPorIdOEmail(id);
+
+    if (usuarioBD && usuarioBD.suscripcionEstado === 'authorized') {
+      return res.json({ 
+        activo: true, 
+        plan: usuarioBD.plan // 'starter' (200 textos) o 'pro' (ilimitado + audios)
+      });
+    }
+
+    return res.json({ activo: false });
+  } catch (error) {
+    res.status(500).json({ error: 'Error verificando suscripción' });
+  }
+});
+
 app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
     const event = req.body;
