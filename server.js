@@ -544,6 +544,43 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 });
 
 // ==========================================
+// RUTA FALTANTE: /api/crear-preferencia-mp
+// ==========================================
+app.post('/api/crear-preferencia-mp', async (req, res) => {
+  try {
+    const { email, plan } = req.body;
+    const precio = plan === 'anual' ? 120 : 15;
+    const frecuencia = 1;
+    const frecuenciaTipo = plan === 'anual' ? 'years' : 'months';
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
+    const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
+
+    const preApproval = new PreApproval(mpClient);
+    const result = await preApproval.create({
+      body: {
+        reason: `AI Sales Copilot - Suscripción ${(plan || 'mensual').toUpperCase()}`,
+        auto_recurring: {
+          frequency: frecuencia,
+          frequency_type: frecuenciaTipo,
+          transaction_amount: Number(precio),
+          currency_id: 'USD'
+        },
+        back_url: `${frontendUrl}/gracias.html`,
+        payer_email: email || 'cliente@desconocido.com',
+        status: 'pending',
+        notification_url: `${backendUrl}/api/webhook-mercadopago`
+      }
+    });
+
+    res.json({ init_point: result.init_point });
+  } catch (error) {
+    console.error('Error al crear preferencia de Mercado Pago:', error.message);
+    res.status(500).json({ error: 'Error al procesar la solicitud de suscripción.' });
+  }
+});
+
+// ==========================================
 // ENDPOINT 3: Resumir Historial de Chat
 // ==========================================
 app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
