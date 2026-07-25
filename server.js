@@ -550,18 +550,19 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
     
-    // 1. Definir los precios base en USD según tu frontend
-    let precioUSD = 15; // Starter por defecto
+    // 1. Definir precios y límites según el plan elegido
+    let precioUSD = 10; // Plan Starter por defecto ($10 USD / mes)
     let frecuencia = 1;
     let frecuenciaTipo = 'months';
+    let limiteRespuestasDia = 200;
+    let incluyeAudio = false;
 
     if (plan === 'pro') {
-      precioUSD = 39;
+      precioUSD = 59; // Plan Pro / Completo ($59 USD / mes)
+      frecuencia = 1;
       frecuenciaTipo = 'months';
-    } else if (plan === 'anual' || plan === 'business') {
-      precioUSD = 290;
-      frecuencia = 12; // 12 meses para cubrir el año completo de forma compatible con Mercado Pago
-      frecuenciaTipo = 'months';
+      limiteRespuestasDia = 999999; // Ilimitado
+      incluyeAudio = true;
     }
 
     // 2. Obtener la tasa de cambio actual USD a COP automáticamente
@@ -601,10 +602,79 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
       }
     });
 
-    res.json({ init_point: result.init_point });
+    res.json({ 
+      init_point: result.init_point,
+      planConfig: {
+        limiteRespuestasDia,
+        incluyeAudio
+      }
+    });
   } catch (error) {
     console.error('Error al crear preferencia de Mercado Pago:', error.message);
     res.status(500).json({ error: 'Error al procesar la solicitud de suscripción.' });
+  }
+});
+
+app.post('/api/webhook-mercadopago', async (req, res) => {
+  try {
+    const event = req.body;
+
+    // Mercado Pago notifica eventos de suscripciones (preapproval) o pagos (payment)
+    if (event.type === 'subscription_preapproval' || event.action === 'created' || event.action === 'updated') {
+      const preapprovalId = event.data.id;
+      
+      // Consultar el estado real de la suscripción a la API de Mercado Pago
+      const preApproval = new PreApproval(mpClient);
+      const subscriptionInfo = await preApproval.get({ id: preapprovalId });
+
+      if (subscriptionInfo && subscriptionInfo.status === 'authorized') {
+        const payerEmail = subscriptionInfo.payer_email;
+        
+        // 🛠️ AQUÍ ACTIVAS LA LICENCIA EN TU BASE DE DATOS O CACHÉ
+        // Puedes generar una clave basada en su email o marcar su email como "PRO_ACTIVE"
+        console.log(`✅ Suscripción autorizada para el correo: ${payerEmail}`);
+        
+        // Opcional: Guardar en tu base de datos que este email tiene acceso VIP/Pro
+      }
+    }
+
+    res.status(200).send('Webhook recibido correctamente');
+  } catch (error) {
+    console.error('Error en webhook de Mercado Pago:', error.message);
+    res.status(500).json({ error: 'Error procesando webhook' });
+  }
+});
+
+app.get('/api/validar-licencia', async (req, res) => {
+  try {
+    const licenseKey = req.headers['x-user-license'];
+
+    if (!licenseKey || licenseKey === 'TRIAL_KEY') {
+      return res.status(401).json({ 
+        activo: false, 
+        plan: 'trial', 
+        mensaje: 'Licencia de prueba o inválida' 
+      });
+    }
+
+    // 🛠️ Aquí validas si la licenseKey existe en tu base de datos y está pagada
+    // Ejemplo rápido simulado:
+    const esValida = licenseKey.startsWith('PRES-'); // O tu lógica de keys de pago
+
+    if (esValida) {
+      return res.json({ 
+        activo: true, 
+        plan: 'pro', // o 'business' según lo que pagó
+        mensaje: 'Licencia activa' 
+      });
+    } else {
+      return res.status(403).json({ 
+        activo: false, 
+        mensaje: 'Licencia vencida o no encontrada' 
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Error al validar licencia' });
   }
 });
 
