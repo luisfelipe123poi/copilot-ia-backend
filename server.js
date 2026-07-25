@@ -549,9 +549,12 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
-    const precio = plan === 'anual' ? 120 : 15;
+    
+    // 🛠️ MONTOS ACTUALIZADOS (Superiores al mínimo de $1600 exigido por Mercado Pago)
+    const precio = plan === 'anual' ? 120000 : 15000; 
     const frecuencia = 1;
     const frecuenciaTipo = plan === 'anual' ? 'years' : 'months';
+    const monedaLocal = 'COP'; // Cambia a 'ARS' o 'MXN' si tu cuenta opera en otro país
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
@@ -564,7 +567,7 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
           frequency: frecuencia,
           frequency_type: frecuenciaTipo,
           transaction_amount: Number(precio),
-          currency_id: 'USD'
+          currency_id: monedaLocal // 🛠️ Moneda local configurada correctamente
         },
         back_url: `${frontendUrl}/gracias.html`,
         payer_email: email || 'cliente@desconocido.com',
