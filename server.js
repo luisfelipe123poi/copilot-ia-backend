@@ -201,36 +201,7 @@ app.post('/api/crear-checkout', async (req, res) => {
 // ==========================================
 // ENDPOINT PASARELA DE PAGOS: Webhook (Genera Licencia Recurrente en MongoDB)
 // ==========================================
-app.post('/api/webhook-mercadopago', async (req, res) => {
-  try {
-    const { type, action } = req.body;
 
-    if (type === 'subscription' || action === 'payment.created' || action === 'subscription_preapproval.authorized') {
-      const newLicenseKey = generateLicenseKey('PRES');
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 35); // Margen de 35 días para la renovación automática
-
-      await License.create({
-        licenseKey: newLicenseKey,
-        status: 'active',
-        usageCount: 0,
-        email: 'suscriptor_mercadopago@local',
-        expiresAt
-      });
-
-      console.log(`\n==================================================`);
-      console.log(`✅ ¡SUSCRIPCIÓN RECURRENTE Y LICENCIA CREADA EN MONGO!`);
-      console.log(`Clave: ${newLicenseKey}`);
-      console.log(`Válida hasta: ${expiresAt.toISOString()}`);
-      console.log(`==================================================\n`);
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error('Error en webhook de suscripción:', error.message);
-    res.sendStatus(500);
-  }
-});
 
 // ==========================================
 // ENDPOINT 1: Analizar Intención en Segundo Plano (Clasificación)
@@ -617,21 +588,23 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
 
 // Ejemplo en Node.js / Express
 app.get('/api/verificar-suscripcion', async (req, res) => {
-  const { id } = req.query; // Puede ser el email del usuario o su licenseKey
+  const { id } = req.query; // Puede ser el email o la licenseKey del usuario
 
   try {
-    // 1. Busca en tu base de datos si el usuario pagó y su suscripción está 'authorized' o 'active'
-    const usuarioBD = await BaseDeDatos.encontrarPorIdOEmail(id);
+    const usuarioBD = await License.findOne({ 
+      $or: [{ email: id }, { licenseKey: id }] 
+    });
 
-    if (usuarioBD && usuarioBD.suscripcionEstado === 'authorized') {
+    if (usuarioBD && (usuarioBD.status === 'active' || usuarioBD.status === 'trial')) {
       return res.json({ 
         activo: true, 
-        plan: usuarioBD.plan // 'starter' (200 textos) o 'pro' (ilimitado + audios)
+        plan: usuarioBD.status === 'trial' ? 'starter' : 'pro'
       });
     }
 
     return res.json({ activo: false });
   } catch (error) {
+    console.error('Error verificando suscripción:', error.message);
     res.status(500).json({ error: 'Error verificando suscripción' });
   }
 });
@@ -640,22 +613,29 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
     const event = req.body;
 
-    // Mercado Pago notifica eventos de suscripciones (preapproval) o pagos (payment)
-    if (event.type === 'subscription_preapproval' || event.action === 'created' || event.action === 'updated') {
-      const preapprovalId = event.data.id;
+    if (event.type === 'subscription_preapproval' || event.action === 'created' || event.action === 'updated' || event.action === 'payment.created') {
+      const preapprovalId = event.data?.id || event.id;
       
-      // Consultar el estado real de la suscripción a la API de Mercado Pago
-      const preApproval = new PreApproval(mpClient);
-      const subscriptionInfo = await preApproval.get({ id: preapprovalId });
+      if (preapprovalId) {
+        const preApproval = new PreApproval(mpClient);
+        const subscriptionInfo = await preApproval.get({ id: preapprovalId });
 
-      if (subscriptionInfo && subscriptionInfo.status === 'authorized') {
-        const payerEmail = subscriptionInfo.payer_email;
-        
-        // 🛠️ AQUÍ ACTIVAS LA LICENCIA EN TU BASE DE DATOS O CACHÉ
-        // Puedes generar una clave basada en su email o marcar su email como "PRO_ACTIVE"
-        console.log(`✅ Suscripción autorizada para el correo: ${payerEmail}`);
-        
-        // Opcional: Guardar en tu base de datos que este email tiene acceso VIP/Pro
+        if (subscriptionInfo && subscriptionInfo.status === 'authorized') {
+          const payerEmail = subscriptionInfo.payer_email;
+          const newLicenseKey = generateLicenseKey('PRES');
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 35);
+
+          await License.create({
+            licenseKey: newLicenseKey,
+            status: 'active',
+            usageCount: 0,
+            email: payerEmail || 'suscriptor_mercadopago@local',
+            expiresAt
+          });
+
+          console.log(`✅ Suscripción autorizada y licencia creada para: ${payerEmail} (${newLicenseKey})`);
+        }
       }
     }
 
