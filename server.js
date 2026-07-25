@@ -1,5 +1,5 @@
 // ==========================================
-// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago)
+// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago Suscripciones)
 // ==========================================
 
 import express from 'express';
@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 
 dotenv.config();
 
@@ -43,7 +43,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Instancia de Mercado Pago (Producción / Dinámica)
+// Instancia de Mercado Pago (Producción / Suscripciones PreApproval)
 const mpClient = new MercadoPagoConfig({ 
   accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
 });
@@ -127,7 +127,7 @@ app.post('/api/generar-system-prompt', async (req, res) => {
     }
 
     const systemPromptMeta = `
-      Eres un experto Prompt Engineer especialista en arquitectura de IA para asistentes conversacionales y venta directa por WhatsApp.
+      Escribe un experto Prompt Engineer especialista en arquitectura de IA para asistentes conversacionales y venta directa por WhatsApp.
       
       OBJETIVO:
       Crear una instrucción de sistema (System Prompt) estructurada, profesional y altamente efectiva para entrenar al chatbot de WhatsApp de este cliente.
@@ -162,67 +162,64 @@ app.post('/api/generar-system-prompt', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT PASARELA DE PAGOS: Crear Checkout (Mercado Pago)
+// ENDPOINT PASARELA DE PAGOS: Crear Suscripción Recurrente (Mercado Pago Preapproval)
 // ==========================================
 app.post('/api/crear-checkout', async (req, res) => {
   try {
-    const { email, plan } = req.body;
+    const { email, plan } = req.body; // plan: 'mensual' ($15) o 'anual' ($120)
     const precio = plan === 'anual' ? 120 : 15;
+    const frecuencia = 1;
+    const frecuenciaTipo = plan === 'anual' ? 'years' : 'months';
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
 
-    const preference = new Preference(mpClient);
-    const result = await preference.create({
+    const preApproval = new PreApproval(mpClient);
+    const result = await preApproval.create({
       body: {
-        items: [
-          {
-            id: plan || 'mensual',
-            title: `AI Sales Copilot - Licencia ${(plan || 'mensual').toUpperCase()}`,
-            quantity: 1,
-            unit_price: Number(precio),
-            currency_id: 'USD'
-          }
-        ],
-        payer: { email: email || 'cliente@desconocido.com' },
-        back_urls: {
-          success: `${frontendUrl}/gracias.html`,
-          failure: `${frontendUrl}/cancelado.html`,
-          pending: `${frontendUrl}/pendiente.html`
+        reason: `AI Sales Copilot - Suscripción ${(plan || 'mensual').toUpperCase()}`,
+        auto_recurring: {
+          frequency: frecuencia,
+          frequency_type: frecuenciaTipo,
+          transaction_amount: Number(precio),
+          currency_id: 'USD'
         },
-        auto_return: 'approved',
+        back_url: `${frontendUrl}/gracias.html`,
+        payer_email: email || 'cliente@desconocido.com',
+        status: 'pending',
         notification_url: `${backendUrl}/api/webhook-mercadopago`
       }
     });
 
     res.json({ init_point: result.init_point });
   } catch (error) {
-    console.error('Error al crear checkout de pago:', error.message);
-    res.status(500).json({ error: 'Error al procesar la solicitud de pago.' });
+    console.error('Error al crear suscripción de Mercado Pago:', error.message);
+    res.status(500).json({ error: 'Error al procesar la solicitud de suscripción.' });
   }
 });
 
 // ==========================================
-// ENDPOINT PASARELA DE PAGOS: Webhook (Genera Licencia Real en MongoDB)
+// ENDPOINT PASARELA DE PAGOS: Webhook (Genera Licencia Recurrente en MongoDB)
 // ==========================================
 app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
-    const { type, data } = req.body;
+    const { type, action } = req.body;
 
-    if (type === 'payment' || req.body.action === 'payment.created') {
+    if (type === 'subscription' || action === 'payment.created' || action === 'subscription_preapproval.authorized') {
       const newLicenseKey = generateLicenseKey('PRES');
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
+      expiresAt.setDate(expiresAt.getDate() + 35); // Margen de 35 días para la renovación automática
 
       await License.create({
         licenseKey: newLicenseKey,
         status: 'active',
         usageCount: 0,
-        email: 'cliente_pagado@mercadopago.local',
+        email: 'suscriptor_mercadopago@local',
         expiresAt
       });
 
       console.log(`\n==================================================`);
-      console.log(`✅ ¡PAGO EXITOSO Y LICENCIA GENERADA EN MONGO (MP)!`);
+      console.log(`✅ ¡SUSCRIPCIÓN RECURRENTE Y LICENCIA CREADA EN MONGO!`);
       console.log(`Clave: ${newLicenseKey}`);
       console.log(`Válida hasta: ${expiresAt.toISOString()}`);
       console.log(`==================================================\n`);
@@ -230,7 +227,7 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error('Error en webhook Mercado Pago:', error.message);
+    console.error('Error en webhook de suscripción:', error.message);
     res.sendStatus(500);
   }
 });
@@ -247,7 +244,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
     }
 
     const systemPrompt = `
-      Eres un clasificador de mensajes de WhatsApp en tiempo real.
+      Escribes un clasificador de mensajes de WhatsApp en tiempo real.
       Tu trabajo es analizar el mensaje entrante y determinar la prioridad de atención.
 
       Criterios de clasificación:
@@ -320,7 +317,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       }
 
       const promptExplicacion = `
-        Eres un asistente analista de comunicación comercial.
+        Escribes un asistente analista de comunicación comercial.
         Analiza el siguiente mensaje entrante y el contexto del chat.
         
         OBJETIVO:
@@ -558,7 +555,7 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
     }
 
     const systemPrompt = `
-      Eres un asistente analista ejecutivo. Analiza la conversación de WhatsApp y extrae un resumen ultraconciso.
+      Escribe un asistente analista ejecutivo. Analiza la conversación de WhatsApp y extrae un resumen ultraconciso.
       
       Responde ÚNICAMENTE en formato JSON:
       {
@@ -589,7 +586,7 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
 
 // Endpoint de verificación de estado
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB & Mercado Pago)' });
+  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB & Mercado Pago Suscripciones)' });
 });
 
 // Inicialización del Servidor
