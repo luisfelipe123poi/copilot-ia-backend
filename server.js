@@ -1,5 +1,5 @@
 // ==========================================
-// AI Copilot Universal - Backend Completo (Node.js / Express)
+// AI Copilot Universal - Backend Producción (MongoDB + PayPal)
 // ==========================================
 
 import express from 'express';
@@ -8,7 +8,8 @@ import dotenv from 'dotenv';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import multer from 'multer';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import mongoose from 'mongoose';
+import checkoutNodeJssdk from '@paypal/checkout-server-sdk';
 
 dotenv.config();
 
@@ -21,15 +22,37 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
+// 1. Conexión a MongoDB (Permanente para Producción)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ Conectado exitosamente a MongoDB Atlas'))
+  .catch(err => console.error('❌ Error conectando a MongoDB:', err));
+
+// Esquema de Licencias en Base de Datos
+const licenseSchema = new mongoose.Schema({
+  licenseKey: { type: String, required: true, unique: true },
+  status: { type: String, enum: ['trial', 'active', 'expired'], default: 'trial' },
+  usageCount: { type: Number, default: 0 },
+  email: { type: String, required: true },
+  expiresAt: { type: Date, required: true }
+});
+const License = mongoose.model('License', licenseSchema);
+
 // Instancia de OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Instancia de Mercado Pago
-const mpClient = new MercadoPagoConfig({ 
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
-});
+// Configuración de PayPal (Entorno Live / Producción)
+function client() {
+  return new checkoutNodeJssdk.core.LiveEnvironment(
+    process.env.PAYPAL_CLIENT_ID || 'TU_PAYPAL_CLIENT_ID',
+    process.env.PAYPAL_CLIENT_SECRET || 'TU_PAYPAL_SECRET'
+  );
+}
+function paypalClient() {
+  return new checkoutNodeJssdk.core.PayPalHttpClient(client());
+}
 
 // Contexto base por defecto si el usuario no configura nada
 const CONTEXTO_NEGOCIO_DEFAULT = `
@@ -37,9 +60,7 @@ Somos una empresa que ofrece soluciones de software, páginas web, soporte técn
 Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
 `;
 
-// Base de datos en memoria para validar licencias / Free Trial
 const USAGE_LIMIT_FREE_TRIAL = 1000;
-const memoryDb = new Map(); // Key: licenseKey, Value: { usageCount: number, status: 'trial' | 'active', email: string, expiresAt: string }
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6)
 function generateLicenseKey(prefix = 'PRES') {
@@ -51,19 +72,26 @@ function generateLicenseKey(prefix = 'PRES') {
 }
 
 // ==========================================
-// MIDDLEWARE: Validación de Licencia / Free Trial
+// MIDDLEWARE: Validación de Licencia en MongoDB
 // ==========================================
 async function validarLicencia(req, res, next) {
   const licenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
 
-  // Inicializar usuario en la memoria si no existe
-  if (!memoryDb.has(licenseKey)) {
-    memoryDb.set(licenseKey, { usageCount: 0, status: 'trial' });
+  let user = await License.findOne({ licenseKey });
+
+  if (!user) {
+    // Si no existe, lo creamos como Trial por defecto en MongoDB
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 días de prueba
+    user = await License.create({
+      licenseKey,
+      status: 'trial',
+      usageCount: 0,
+      email: 'trial_user@system.local',
+      expiresAt
+    });
   }
 
-  const user = memoryDb.get(licenseKey);
-
-  // Si está en prueba gratuita, validar el límite de respuestas
   if (user.status === 'trial') {
     if (user.usageCount >= USAGE_LIMIT_FREE_TRIAL) {
       return res.status(403).json({
@@ -72,11 +100,11 @@ async function validarLicencia(req, res, next) {
       });
     }
     user.usageCount += 1;
-    memoryDb.set(licenseKey, user);
+    await user.save();
   } else if (user.status === 'active') {
-    if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
+    if (new Date(user.expiresAt) < new Date()) {
       user.status = 'expired';
-      memoryDb.set(licenseKey, user);
+      await user.save();
       return res.status(403).json({
         error: 'Tu suscripción ha expirado. Por favor renueva tu plan.',
         code: 'TRIAL_EXPIRED'
@@ -91,6 +119,83 @@ async function validarLicencia(req, res, next) {
 
   next();
 }
+
+// ==========================================
+// ENDPOINT PAYPAL: Crear Orden de Pago
+// ==========================================
+app.post('/api/crear-orden-paypal', async (req, res) => {
+  try {
+    const { plan, email } = req.body; // plan: 'mensual' ($15) o 'anual' ($120)
+    const precio = plan === 'anual' ? '120.00' : '15.00';
+
+    const request = new checkoutNodeJssdk.orders.OrdersCreateRequest();
+    request.prefer("return=representation");
+    request.requestBody({
+      intent: 'CAPTURE',
+      purchase_units: [{
+        amount: {
+          currency_code: 'USD',
+          value: precio
+        },
+        description: `Licencia AI Sales Copilot - Plan ${plan.toUpperCase()} (${email})`
+      }],
+      application_context: {
+        return_url: `${process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com'}/gracias.html`,
+        cancel_url: `${process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com'}/cancelado.html`
+      }
+    });
+
+    const response = await paypalClient().execute(request);
+    const approveLink = response.result.links.find(link => link.rel === 'approve').href;
+    res.json({ id: response.result.id, approve_link: approveLink });
+
+  } catch (error) {
+    console.error('Error creando orden en PayPal:', error);
+    res.status(500).json({ error: 'No se pudo procesar la orden con PayPal.' });
+  }
+});
+
+// ==========================================
+// ENDPOINT PAYPAL: Capturar Pago y Generar Licencia en MongoDB
+// ==========================================
+app.post('/api/capturar-pago-paypal', async (req, res) => {
+  try {
+    const { orderID, email } = req.body;
+
+    const request = new checkoutNodeJssdk.orders.OrdersCaptureRequest(orderID);
+    request.requestBody({});
+
+    const response = await paypalClient().execute(request);
+
+    if (response.result.status === 'COMPLETED') {
+      const newLicenseKey = generateLicenseKey('PRES');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // 30 días de acceso Pro
+
+      await License.create({
+        licenseKey: newLicenseKey,
+        status: 'active',
+        usageCount: 0,
+        email: email || 'cliente@desconocido.com',
+        expiresAt
+      });
+
+      console.log(`\n==================================================`);
+      console.log(`✅ ¡PAGO EXITOSO Y LICENCIA GENERADA EN MONGO!`);
+      console.log(`Email: ${email}`);
+      console.log(`Clave: ${newLicenseKey}`);
+      console.log(`==================================================\n`);
+
+      return res.json({ success: true, licenseKey: newLicenseKey });
+    } else {
+      return res.status(400).json({ success: false, error: 'El pago no se completó correctamente.' });
+    }
+
+  } catch (error) {
+    console.error('Error al capturar pago PayPal:', error);
+    res.status(500).json({ error: 'Error interno al validar el pago.' });
+  }
+});
 
 // ==========================================
 // ENDPOINT NUEVO: Generador de System Prompt Personalizado (Meta-Prompt)
@@ -135,75 +240,6 @@ app.post('/api/generar-system-prompt', async (req, res) => {
   } catch (error) {
     console.error('Error en /api/generar-system-prompt:', error.message);
     return res.status(500).json({ error: 'Error al generar la instrucción personalizada de IA.' });
-  }
-});
-
-// ==========================================
-// ENDPOINT PASARELA DE PAGOS: Crear Checkout
-// ==========================================
-app.post('/api/crear-checkout', async (req, res) => {
-  try {
-    const { email, plan } = req.body;
-    const precio = plan === 'anual' ? 120 : 15;
-
-    const preference = new Preference(mpClient);
-    const result = await preference.create({
-      body: {
-        items: [
-          {
-            id: plan,
-            title: `AI Sales Copilot - Licencia ${plan.toUpperCase()}`,
-            quantity: 1,
-            unit_price: Number(precio),
-            currency_id: 'USD'
-          }
-        ],
-        payer: { email },
-        back_urls: {
-          success: 'https://tuweb.com/gracias.html',
-          failure: 'https://tuweb.com/cancelado.html'
-        },
-        auto_return: 'approved',
-        notification_url: 'https://tu-backend.com/api/webhook-mercadopago'
-      }
-    });
-
-    res.json({ init_point: result.init_point });
-  } catch (error) {
-    console.error('Error al crear checkout de pago:', error.message);
-    res.status(500).json({ error: 'Error al procesar la solicitud de pago.' });
-  }
-});
-
-// ==========================================
-// ENDPOINT PASARELA DE PAGOS: Webhook
-// ==========================================
-app.post('/api/webhook-mercadopago', async (req, res) => {
-  try {
-    const { type } = req.body;
-
-    if (type === 'payment') {
-      const newLicenseKey = generateLicenseKey('PRES');
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-
-      memoryDb.set(newLicenseKey, {
-        status: 'active',
-        usageCount: 0,
-        expiresAt: expiresAt.toISOString()
-      });
-
-      console.log(`\n==================================================`);
-      console.log(`✅ ¡NUEVA LICENCIA ACTIVADA!`);
-      console.log(`Clave: ${newLicenseKey}`);
-      console.log(`Válida hasta: ${expiresAt.toISOString()}`);
-      console.log(`==================================================\n`);
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error('Error en webhook Mercado Pago:', error.message);
-    res.sendStatus(500);
   }
 });
 
@@ -257,7 +293,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT 2: Generar Respuesta Universal (Con MAPEO CORRECTO DE ROLES)
+// ENDPOINT 2: Generar Respuesta Universal (Con MAPEO DE ROLES Y TONO HUMANO)
 // ==========================================
 app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
@@ -341,7 +377,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         reglaModo = `
           ROL: Especialista en Ventas y Cierre Comercial por WhatsApp.
           OBJETIVO: ${instruccionAccion}
-          INSTRUCCIÓN EXTRA: Si el cliente ya confirmó una cita, aceptó el enlace o cerró la negociación, NO hagas más preguntas. Limítate a confirmar con un mensaje amable, directo y profesional (ej: "Perfecto, quedamos agendados. ¡Un saludo!"). Si la conversación sigue abierta, termina con un llamado a la acción directo.
+          INSTRUCCIÓN EXTRA: Si el cliente ya confirmó una cita, aceptó el enlace o cerró la negociación, NO hagas más preguntas. Limítate a confirmar con un mensaje amable, natural y fluido.
         `;
         break;
     }
@@ -370,7 +406,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         break;
     }
 
-    // 3. System Prompt Compuesto
+    // 3. System Prompt Compuesto con Tono Humano
     const promptUsuarioCustom = promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0 
       ? `INSTRUCCIONES DE COMPORTAMIENTO Y ENTRENAMIENTO PERSONALIZADO DEL CLIENTE:\n${promptEntrenamientoUsuario}`
       : `INSTRUCCIONES DE COMPORTAMIENTO:\n${reglaModo}`;
@@ -387,7 +423,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       - Tono a aplicar: ${instruccionTono}
       - Longitud: MÁXIMO 2 oraciones cortas. Ve al grano de inmediato.
       - ESTRICTAMENTE PROHIBIDO usar fórmulas corporativas robóticas, frases acartonadas como "¡Un saludo!" al final, ni despedidas corporativas formales de call-center.
-      - Si la cita ya quedó confirmada, responde de forma relajada y casual (Ej: "Listo, nos vemos mañana a las 3 PM por acá. ¡Cualquier cosa me avisas!").
+      - Si la cita ya quedó confirmada, responde de forma relajada y casual (Ej: "Listo, nos vemos mañana por acá. ¡Cualquier cosa me avisas!").
       - Habla como un asesor experto de carne y hueso conversando por WhatsApp: cercano, fluido, natural y cero robótico.
     `;
 
@@ -397,10 +433,6 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
       historialChat.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
-        
-        // CORRECCIÓN CRÍTICA DE ROLES: 
-        // Si el remitente es 'bot', 'assistant' o 'asesor', va como 'assistant'. 
-        // Todo lo demás (cliente, user, etc.) va como 'user'.
         const rolOpenAI = (remitente === 'bot' || remitente === 'assistant' || remitente === 'asesor') ? 'assistant' : 'user';
         
         mensajesChatOpenAI.push({
@@ -409,7 +441,6 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       });
 
-      // Verificar si el último mensaje del historial ya coincide con el mensajeCliente actual
       const ultimoMsgObj = historialChat[historialChat.length - 1];
       const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
       const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
@@ -430,7 +461,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     }
 
     // 🔎 LOG FINAL DE PAYLOAD ENVIADO A OPENAI
-    console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
+    console.log('🤖 Payload final de messages enviado al modelo:', JSON.stringify(mensajesChatOpenAI, null, 2));
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -561,13 +592,13 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
 
 // Endpoint de verificación de estado
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend' });
+  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend - Producción MongoDB & PayPal' });
 });
 
 // Inicialización del Servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`\n==================================================`);
-  console.log(`🚀 Servidor AI Copilot corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor AI Copilot corriendo en puerto ${PORT}`);
   console.log(`==================================================\n`);
 });
