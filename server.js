@@ -550,11 +550,35 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
     
-    // 🛠️ MONTOS ACTUALIZADOS (Superiores al mínimo de $1600 exigido por Mercado Pago)
-    const precio = plan === 'anual' ? 120000 : 15000; 
-    const frecuencia = 1;
-    const frecuenciaTipo = plan === 'anual' ? 'years' : 'months';
-    const monedaLocal = 'COP'; // Cambia a 'ARS' o 'MXN' si tu cuenta opera en otro país
+    // 1. Definir los precios base en USD según tu frontend
+    let precioUSD = 15; // Starter por defecto
+    let frecuencia = 1;
+    let frecuenciaTipo = 'months';
+
+    if (plan === 'pro') {
+      precioUSD = 39;
+      frecuenciaTipo = 'months';
+    } else if (plan === 'anual' || plan === 'business') {
+      precioUSD = 290;
+      frecuenciaTipo = 'years';
+    }
+
+    // 2. Obtener la tasa de cambio actual USD a COP de forma automática
+    let tasaCambio = 4000; // Valor de respaldo por defecto (Fallback)
+    try {
+      const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (responseTasa.ok) {
+        const dataTasa = await responseTasa.json();
+        if (dataTasa && dataTasa.rates && dataTasa.rates.COP) {
+          tasaCambio = dataTasa.rates.COP;
+        }
+      }
+    } catch (errTasa) {
+      console.warn('No se pudo actualizar la tasa del dólar, usando valor de respaldo:', errTasa.message);
+    }
+
+    // 3. Calcular el precio final en Pesos Colombianos (COP) redondeado
+    const precioFinalCOP = Math.round(precioUSD * tasaCambio);
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
@@ -562,12 +586,12 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
     const preApproval = new PreApproval(mpClient);
     const result = await preApproval.create({
       body: {
-        reason: `AI Sales Copilot - Suscripción ${(plan || 'mensual').toUpperCase()}`,
+        reason: `AI Sales Copilot - Suscripción ${(plan || 'starter').toUpperCase()} ($${precioUSD} USD)`,
         auto_recurring: {
           frequency: frecuencia,
           frequency_type: frecuenciaTipo,
-          transaction_amount: Number(precio),
-          currency_id: monedaLocal // 🛠️ Moneda local configurada correctamente
+          transaction_amount: Number(precioFinalCOP),
+          currency_id: 'COP'
         },
         back_url: `${frontendUrl}/gracias.html`,
         payer_email: email || 'cliente@desconocido.com',
