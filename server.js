@@ -572,27 +572,30 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 // ==========================================
 // RUTA: /api/crear-preferencia-mp
 // ==========================================
+// ==========================================
+// RUTA: /api/crear-preferencia-mp
+// ==========================================
 app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
     
     // 1. Definir precios y límites según el plan elegido
-    let precioUSD = 10; // Plan Starter por defecto ($10 USD / mes)
+    let precioUSD = 10; // Plan Starter por defecto ($10 USD / mes)[cite: 4]
     let frecuencia = 1;
     let frecuenciaTipo = 'months';
     let limiteRespuestasDia = 200;
     let incluyeAudio = false;
 
     if (plan === 'pro') {
-      precioUSD = 59; // Plan Pro / Completo ($59 USD / mes)
+      precioUSD = 59; // Plan Pro / Completo ($59 USD / mes)[cite: 4]
       frecuencia = 1;
       frecuenciaTipo = 'months';
-      limiteRespuestasDia = 999999; // Ilimitado
+      limiteRespuestasDia = 999999; // Ilimitado[cite: 4]
       incluyeAudio = true;
     }
 
     // 2. Obtener la tasa de cambio actual USD a COP automáticamente
-    let tasaCambio = 4000; // Valor de respaldo (Fallback)
+    let tasaCambio = 4000; // Valor de respaldo (Fallback)[cite: 4]
     try {
       const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
       if (responseTasa.ok) {
@@ -611,6 +614,7 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
 
+    // 4. Crear la suscripción recurrente mediante PreApproval de Mercado Pago
     const preApproval = new PreApproval(mpClient);
     const result = await preApproval.create({
       body: {
