@@ -1,5 +1,5 @@
 // ==========================================
-// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago Suscripciones)
+// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo)
 // ==========================================
 
 import express from 'express';
@@ -63,6 +63,66 @@ function generateLicenseKey(prefix = 'PRES') {
   const part2 = bytes.substring(4, 8);
   const part3 = bytes.substring(8, 12);
   return `${prefix}-${part1}-${part2}-${part3}`;
+}
+
+// ==========================================
+// FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
+// ==========================================
+async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  
+  if (!brevoApiKey) {
+    console.warn('⚠️ No se encontró la variable BREVO_API_KEY en el archivo .env. El correo no pudo enviarse.');
+    return;
+  }
+
+  const payload = {
+    sender: {
+      name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
+      email: process.env.BREVO_SENDER_EMAIL || 'no-reply@prestigecloser.com'
+    },
+    to: [
+      {
+        email: destinatarioEmail
+      }
+    ],
+    subject: '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀',
+    htmlContent: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
+        <h2 style="color: #4f46e5;">¡Gracias por activar tu suscripción! 🎉</h2>
+        <p>Hola,</p>
+        <p>Nos alegra confirmar que tu pago se ha procesado con éxito y tu cuenta ya se encuentra en modo <strong>Pro</strong>.</p>
+        <p>Tu clave de licencia única para activar la extensión de WhatsApp es:</p>
+        <div style="background-color: #e0e7ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #3730a3; letter-spacing: 2px; margin: 20px 0;">
+          ${licenseKey}
+        </div>
+        <p>Copia esta clave, pégala en la configuración de tu extensión de Chrome y comienza a disfrutar de todas las funciones automatizadas sin límites.</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+        <p style="font-size: 12px; color: #6b7280;">Si tienes alguna duda o necesitas soporte, responde directamente a este correo.</p>
+      </div>
+    `
+  };
+
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': brevoApiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Error al enviar correo mediante Brevo');
+    }
+
+    console.log(`📧 Correo de licencia enviado con éxito a través de Brevo para: ${destinatarioEmail}`);
+  } catch (error) {
+    console.error('❌ Error al enviar correo con Brevo:', error.message);
+  }
 }
 
 // ==========================================
@@ -197,11 +257,6 @@ app.post('/api/crear-checkout', async (req, res) => {
     res.status(500).json({ error: 'Error al procesar la solicitud de suscripción.' });
   }
 });
-
-// ==========================================
-// ENDPOINT PASARELA DE PAGOS: Webhook (Genera Licencia Recurrente en MongoDB)
-// ==========================================
-
 
 // ==========================================
 // ENDPOINT 1: Analizar Intención en Segundo Plano (Clasificación)
@@ -515,7 +570,7 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 });
 
 // ==========================================
-// RUTA FALTANTE: /api/crear-preferencia-mp
+// RUTA: /api/crear-preferencia-mp
 // ==========================================
 app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
@@ -586,7 +641,6 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
   }
 });
 
-// Ejemplo en Node.js / Express
 app.get('/api/verificar-suscripcion', async (req, res) => {
   const { id } = req.query; // Puede ser el email o la licenseKey del usuario
 
@@ -609,39 +663,67 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
   }
 });
 
+// ==========================================
+// ENDPOINT WEBHOOK: Mercado Pago + Brevo (Integrado)
+// ==========================================
 app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
     const event = req.body;
+    console.log('🔔 Webhook de Mercado Pago recibido:', event.type || event.action);
 
-    if (event.type === 'subscription_preapproval' || event.action === 'created' || event.action === 'updated' || event.action === 'payment.created') {
-      const preapprovalId = event.data?.id || event.id;
-      
-      if (preapprovalId) {
-        const preApproval = new PreApproval(mpClient);
-        const subscriptionInfo = await preApproval.get({ id: preapprovalId });
+    const preapprovalId = event.data?.id || event.id;
 
-        if (subscriptionInfo && subscriptionInfo.status === 'authorized') {
-          const payerEmail = subscriptionInfo.payer_email;
-          const newLicenseKey = generateLicenseKey('PRES');
+    if (preapprovalId) {
+      const preApproval = new PreApproval(mpClient);
+      const subscriptionInfo = await preApproval.get({ id: preapprovalId });
+
+      if (subscriptionInfo) {
+        const payerEmail = subscriptionInfo.payer_email;
+        const status = subscriptionInfo.status; // 'authorized', 'paused', 'cancelled', etc.
+
+        // 1. SI ESTÁ AUTORIZADO (PAGO EXITOSO O NUEVA SUSCRIPCIÓN)
+        if (status === 'authorized') {
+          let usuario = await License.findOne({ email: payerEmail });
           const expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 35);
+          expiresAt.setDate(expiresAt.getDate() + 35); // Extiende 35 días
 
-          await License.create({
-            licenseKey: newLicenseKey,
-            status: 'active',
-            usageCount: 0,
-            email: payerEmail || 'suscriptor_mercadopago@local',
-            expiresAt
-          });
-
-          console.log(`✅ Suscripción autorizada y licencia creada para: ${payerEmail} (${newLicenseKey})`);
+          if (usuario) {
+            usuario.status = 'active';
+            usuario.expiresAt = expiresAt;
+            await usuario.save();
+            console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
+          } else {
+            const newLicenseKey = generateLicenseKey('PRES');
+            await License.create({
+              licenseKey: newLicenseKey,
+              status: 'active',
+              usageCount: 0,
+              email: payerEmail || 'suscriptor_mercadopago@local',
+              expiresAt
+            });
+            console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
+            
+            // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO PARA NUEVOS SUSCRIPTORES
+            if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
+              await enviarCorreoBrevo(payerEmail, newLicenseKey);
+            }
+          }
+        } 
+        
+        // 2. SI LA SUSCRIPCIÓN SE PAUSÓ O CANCELÓ (FALTA DE PAGO)
+        else if (status === 'paused' || status === 'cancelled') {
+          await License.updateMany(
+            { email: payerEmail },
+            { $set: { status: 'inactive' } }
+          );
+          console.log(`❌ Suscripción pausada/cancelada por impago para: ${payerEmail}. Acceso bloqueado.`);
         }
       }
     }
 
-    res.status(200).send('Webhook recibido correctamente');
+    res.status(200).send('Webhook procesado correctamente');
   } catch (error) {
-    console.error('Error en webhook de Mercado Pago:', error.message);
+    console.error('Error procesando webhook de Mercado Pago:', error.message);
     res.status(500).json({ error: 'Error procesando webhook' });
   }
 });
@@ -658,14 +740,12 @@ app.get('/api/validar-licencia', async (req, res) => {
       });
     }
 
-    // 🛠️ Aquí validas si la licenseKey existe en tu base de datos y está pagada
-    // Ejemplo rápido simulado:
-    const esValida = licenseKey.startsWith('PRES-'); // O tu lógica de keys de pago
+    const esValida = licenseKey.startsWith('PRES-'); 
 
     if (esValida) {
       return res.json({ 
         activo: true, 
-        plan: 'pro', // o 'business' según lo que pagó
+        plan: 'pro', 
         mensaje: 'Licencia activa' 
       });
     } else {
@@ -722,7 +802,7 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
 
 // Endpoint de verificación de estado
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB & Mercado Pago Suscripciones)' });
+  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB, Mercado Pago & Brevo)' });
 });
 
 // Inicialización del Servidor
