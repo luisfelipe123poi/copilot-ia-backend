@@ -10,7 +10,7 @@
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "http://localhost:3000/*"
+    "https://copilot-ia-backend.onrender.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
