@@ -257,7 +257,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT 2: Generar Respuesta Universal (Con LOGS DE DEPURACIÓN DE MEMORIA)
+// ENDPOINT 2: Generar Respuesta Universal (Con MAPEO CORRECTO DE ROLES)
 // ==========================================
 app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
@@ -271,7 +271,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       tono 
     } = req.body;
 
-    // 🔎 LOGS DE DEPURACIÓN: Ver qué está llegando exactamente desde el frontend
+    // 🔎 LOGS DE DEPURACIÓN
     console.log('\n================ DEPURACIÓN DE MEMORIA / HISTORIAL ================');
     console.log('📥 Mensaje actual del cliente:', mensajeCliente);
     console.log('📚 ¿Llegó historialChat?:', historialChat ? `Sí (Elementos: ${historialChat.length})` : 'NO / VACÍO');
@@ -390,14 +390,17 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       - PROHIBIDO inventar reuniones, citas o llamadas a menos que el cliente lo pida explícitamente en su mensaje. Responde estrictamente al contexto de la conversación actual.
     `;
 
-    // 4. Construir Mensajes para OpenAI mapeando correctamente roles user / assistant
+    // 4. Construir Mensajes para OpenAI mapeando CORRECTAMENTE roles user / assistant
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
       historialChat.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
-        // Mapeo corregido: si es el asesor/bot va como 'assistant', de lo contrario 'user'
-        const rolOpenAI = (remitente === 'asesor' || remitente === 'assistant') ? 'assistant' : 'user';
+        
+        // CORRECCIÓN CRÍTICA DE ROLES: 
+        // Si el remitente es 'bot', 'assistant' o 'asesor', va como 'assistant'. 
+        // Todo lo demás (cliente, user, etc.) va como 'user'.
+        const rolOpenAI = (remitente === 'bot' || remitente === 'assistant' || remitente === 'asesor') ? 'assistant' : 'user';
         
         mensajesChatOpenAI.push({
           role: rolOpenAI,
@@ -410,7 +413,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
       const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
       
-      const esIgualAlUltimo = textoUltimo.trim() === mensajeCliente.trim() && (remitenteUltimo !== 'asesor' && remitenteUltimo !== 'assistant');
+      const esIgualAlUltimo = textoUltimo.trim() === mensajeCliente.trim() && (remitenteUltimo !== 'bot' && remitenteUltimo !== 'assistant' && remitenteUltimo !== 'asesor');
 
       if (!esIgualAlUltimo) {
         mensajesChatOpenAI.push({ 
