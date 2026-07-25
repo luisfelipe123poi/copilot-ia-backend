@@ -560,11 +560,12 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
       frecuenciaTipo = 'months';
     } else if (plan === 'anual' || plan === 'business') {
       precioUSD = 290;
-      frecuenciaTipo = 'years';
+      frecuencia = 12; // 12 meses para cubrir el año completo de forma compatible con Mercado Pago
+      frecuenciaTipo = 'months';
     }
 
-    // 2. Obtener la tasa de cambio actual USD a COP de forma automática
-    let tasaCambio = 4000; // Valor de respaldo por defecto (Fallback)
+    // 2. Obtener la tasa de cambio actual USD a COP automáticamente
+    let tasaCambio = 4000; // Valor de respaldo (Fallback)
     try {
       const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
       if (responseTasa.ok) {
