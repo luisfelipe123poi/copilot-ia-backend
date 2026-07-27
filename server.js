@@ -1,5 +1,5 @@
 // ==========================================
-// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo)
+// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo + Cloudflare R2)
 // ==========================================
 
 import express from 'express';
@@ -10,6 +10,8 @@ import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 dotenv.config();
 
@@ -48,6 +50,16 @@ const mpClient = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
 });
 
+// Configuración del cliente para Cloudflare R2
+const R2 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID || 'TU_ACCOUNT_ID'}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+  },
+});
+
 // Contexto base por defecto si el usuario no configura nada
 const CONTEXTO_NEGOCIO_DEFAULT = `
 Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
@@ -66,8 +78,24 @@ function generateLicenseKey(prefix = 'PRES') {
 }
 
 // ==========================================
-// FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
+// FUNCIÓN AUXILIAR: Generar enlace seguro R2 y enviar Correo vía Brevo API
 // ==========================================
+async function generarEnlaceDescargaSeguro() {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME || "copilot-secure-storage",
+      Key: process.env.R2_FILE_KEY || "Copilot-IA.crx",
+    });
+
+    // El enlace expirará en 24 horas (86400 segundos) para que el cliente pueda descargarlo sin problemas desde su correo
+    const urlTemporal = await getSignedUrl(R2, command, { expiresIn: 86400 });
+    return urlTemporal;
+  } catch (error) {
+    console.error('❌ Error al generar enlace seguro de R2:', error);
+    return null;
+  }
+}
+
 async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
   const brevoApiKey = process.env.BREVO_API_KEY;
   
@@ -75,6 +103,9 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
     console.warn('⚠️ No se encontró la variable BREVO_API_KEY en el archivo .env. El correo no pudo enviarse.');
     return;
   }
+
+  // Generar enlace seguro de descarga desde Cloudflare R2
+  const enlaceDescarga = await generarEnlaceDescargaSeguro() || '#';
 
   const payload = {
     sender: {
@@ -86,16 +117,24 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
         email: destinatarioEmail
       }
     ],
-    subject: '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀',
+    subject: '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro y tu extensión 🚀',
     htmlContent: `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
         <h2 style="color: #4f46e5;">¡Gracias por activar tu suscripción! 🎉</h2>
         <p>Hola,</p>
         <p>Nos alegra confirmar que tu pago se ha procesado con éxito y tu cuenta ya se encuentra en modo <strong>Pro</strong>.</p>
-        <p>Tu clave de licencia única para activar la extensión de WhatsApp es:</p>
+        
+        <p><strong>1. Descarga tu extensión protegida aquí:</strong></p>
+        <p style="text-align: center; margin: 20px 0;">
+          <a href="${enlaceDescarga}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Descargar Archivo Instalable (.crx)</a>
+        </p>
+        <p style="font-size: 12px; color: #6b7280; text-align: center;">(Este enlace de descarga es seguro y exclusivo para ti).</p>
+
+        <p><strong>2. Tu clave de licencia única para activar la extensión es:</strong></p>
         <div style="background-color: #e0e7ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #3730a3; letter-spacing: 2px; margin: 20px 0;">
           ${licenseKey}
         </div>
+        
         <p>Copia esta clave, pégala en la configuración de tu extensión de Chrome y comienza a disfrutar de todas las funciones automatizadas sin límites.</p>
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
         <p style="font-size: 12px; color: #6b7280;">Si tienes alguna duda o necesitas soporte, responde directamente a este correo.</p>
@@ -119,7 +158,7 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
       throw new Error(errorData.message || 'Error al enviar correo mediante Brevo');
     }
 
-    console.log(`📧 Correo de licencia enviado con éxito a través de Brevo para: ${destinatarioEmail}`);
+    console.log(`📧 Correo de licencia y descarga R2 enviado con éxito a través de Brevo para: ${destinatarioEmail}`);
   } catch (error) {
     console.error('❌ Error al enviar correo con Brevo:', error.message);
   }
@@ -331,15 +370,17 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     }
     console.log('===================================================================\n');
 
-    if (!mensajeCliente) {
-      return res.status(400).json({ error: 'El parámetro "mensajeCliente" is obligatorio.' });
+    if (!mensajeCliente || typeof mensajeCliente !== 'string' || mensajeCliente.trim() === '') {
+      return res.status(400).json({ error: 'El parámetro "mensajeCliente" es obligatorio y debe ser un texto válido.' });
     }
 
     // CASO ESPECIAL: Análisis de Lectura / Explicación
     if (tipoAccion === 'analizar_explicar') {
       let conversacionContexto = '';
       if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
-        conversacionContexto = `\nHISTORIAL RECIENTE DEL CHAT:\n` + historialChat.map(m => `- ${m.remitente.toUpperCase()}: ${m.texto}`).join('\n');
+        conversacionContexto = `\nHISTORIAL RECIENTE DEL CHAT:\n` + historialChat
+          .filter(m => m && (m.texto || m.content))
+          .map(m => `- ${(m.remitente || m.role || 'cliente').toUpperCase()}: ${m.texto || m.content}`).join('\n');
       }
 
       const promptExplicacion = `
@@ -426,7 +467,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       ? `INSTRUCCIONES DE COMPORTAMIENTO Y ENTRENAMIENTO PERSONALIZADO DEL CLIENTE:\n${promptEntrenamientoUsuario}`
       : `INSTRUCCIONES DE COMPORTAMIENTO:\n${reglaModo}`;
 
-    const infoNegocio = contextoNegocio || CONTEXTO_NEGOCIO_DEFAULT;
+    const infoNegocio = contextoNegocio || (typeof CONTEXTO_NEGOCIO_DEFAULT !== 'undefined' ? CONTEXTO_NEGOCIO_DEFAULT : '');
 
     const systemPrompt = `
       ${promptUsuarioCustom}
@@ -446,7 +487,10 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
-      historialChat.forEach(msg => {
+      // Filtrar elementos vacíos o corruptos antes de procesar
+      const historialValido = historialChat.filter(msg => msg && (msg.texto || msg.content));
+
+      historialValido.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
         
         // CORRECCIÓN CRÍTICA DE ROLES: 
@@ -461,13 +505,20 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       });
 
       // Verificar si el último mensaje del historial ya coincide con el mensajeCliente actual
-      const ultimoMsgObj = historialChat[historialChat.length - 1];
-      const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
-      const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
-      
-      const esIgualAlUltimo = textoUltimo.trim() === mensajeCliente.trim() && (remitenteUltimo !== 'bot' && remitenteUltimo !== 'assistant' && remitenteUltimo !== 'asesor');
+      if (historialValido.length > 0) {
+        const ultimoMsgObj = historialValido[historialValido.length - 1];
+        const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
+        const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
+        
+        const esIgualAlUltimo = textoUltimo.trim() === mensajeCliente.trim() && (remitenteUltimo !== 'bot' && remitenteUltimo !== 'assistant' && remitenteUltimo !== 'asesor');
 
-      if (!esIgualAlUltimo) {
+        if (!esIgualAlUltimo) {
+          mensajesChatOpenAI.push({ 
+            role: 'user', 
+            content: mensajeCliente 
+          });
+        }
+      } else {
         mensajesChatOpenAI.push({ 
           role: 'user', 
           content: mensajeCliente 
@@ -490,7 +541,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       max_tokens: 220
     });
 
-    const respuestaIA = completion.choices[0].message.content.trim();
+    const respuestaIA = completion.choices[0]?.message?.content?.trim() || 'Disculpa, ¿me puedes repetir eso?';
     return res.json({ respuesta: respuestaIA });
 
   } catch (error) {
@@ -569,9 +620,6 @@ app.post('/api/generar-audio-ia', async (req, res) => {
   }
 });
 
-// ==========================================
-// RUTA: /api/crear-preferencia-mp
-// ==========================================
 // ==========================================
 // RUTA: /api/crear-preferencia-mp
 // ==========================================
@@ -707,7 +755,7 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
             });
             console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
             
-            // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO PARA NUEVOS SUSCRIPTORES
+            // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO (CON ENLACE SEGURO R2 INCLUIDO)
             if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
               await enviarCorreoBrevo(payerEmail, newLicenseKey);
             }
@@ -732,6 +780,63 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
   }
 });
 
+// ==========================================
+// NUEVO ENDPOINT: Generar Licencia Gratis (Promoción / Acceso Directo)
+// ==========================================
+// ==========================================
+// NUEVO ENDPOINT: Generar Licencia Gratis (Promoción única por usuario)
+// ==========================================
+app.post('/api/generar-licencia-gratis', async (req, res) => {
+  try {
+    const { email, diasValidez } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'El correo electrónico es requerido.' });
+    }
+
+    // Verificar si ya existe un registro para este correo
+    let usuarioExistente = await License.findOne({ email });
+
+    if (usuarioExistente) {
+      // SI YA EXISTE: La licencia gratis es de única vez. No se renueva gratis.
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Este correo ya disfrutó de su período de prueba gratuito o ya cuenta con un registro en el sistema. La única forma de continuar es adquiriendo una suscripción Pro de pago.' 
+      });
+    }
+
+    // SI NO EXISTE: Es totalmente nuevo, se le otorga su única licencia gratis por los días indicados (ej: 30 días)
+    const dias = Number(diasValidez) || 30; 
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + dias);
+
+    const newLicenseKey = generateLicenseKey('FREE');
+    const nuevaLicencia = await License.create({
+      licenseKey: newLicenseKey,
+      status: 'active',
+      usageCount: 0,
+      email: email,
+      expiresAt: expiresAt
+    });
+
+    console.log(`🎁 Única licencia gratuita creada para nuevo usuario: ${email} -> Key: ${newLicenseKey}`);
+
+    // Enviar correo de bienvenida con la clave y el instalador seguro de R2
+    await enviarCorreoBrevo(email, newLicenseKey);
+
+    return res.json({ 
+      success: true, 
+      message: 'Licencia gratuita generada y enviada por correo exitosamente.',
+      licenseKey: newLicenseKey,
+      expiresAt: nuevaLicencia.expiresAt
+    });
+
+  } catch (error) {
+    console.error('❌ Error en /api/generar-licencia-gratis:', error.message);
+    return res.status(500).json({ success: false, error: 'Error interno al generar la licencia gratuita.' });
+  }
+});
+
 app.get('/api/validar-licencia', async (req, res) => {
   try {
     const licenseKey = req.headers['x-user-license'];
@@ -744,9 +849,35 @@ app.get('/api/validar-licencia', async (req, res) => {
       });
     }
 
-    const esValida = licenseKey.startsWith('PRES-'); 
+    // Buscar la licencia en la base de datos de MongoDB
+    const licenciaBD = await License.findOne({ licenseKey });
 
-    if (esValida) {
+    if (!licenciaBD) {
+      // Compatibilidad por si mandan una clave fija antigua que empiece con PRES- o FREE-
+      if (licenseKey.startsWith('PRES-') || licenseKey.startsWith('FREE-')) {
+        return res.json({ 
+          activo: true, 
+          plan: 'pro', 
+          mensaje: 'Licencia activa' 
+        });
+      }
+      return res.status(403).json({ 
+        activo: false, 
+        mensaje: 'Licencia no encontrada' 
+      });
+    }
+
+    // Validar estado y fecha de expiración en BD
+    if (licenciaBD.status === 'active') {
+      if (new Date(licenciaBD.expiresAt) < new Date()) {
+        licenciaBD.status = 'expired';
+        await licenciaBD.save();
+        return res.status(403).json({ 
+          activo: false, 
+          mensaje: 'Tu licencia ha expirado.' 
+        });
+      }
+
       return res.json({ 
         activo: true, 
         plan: 'pro', 
@@ -755,9 +886,10 @@ app.get('/api/validar-licencia', async (req, res) => {
     } else {
       return res.status(403).json({ 
         activo: false, 
-        mensaje: 'Licencia vencida o no encontrada' 
+        mensaje: 'Licencia inactiva o vencida' 
       });
     }
+
   } catch (error) {
     res.status(500).json({ error: 'Error al validar licencia' });
   }
@@ -806,7 +938,7 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
 
 // Endpoint de verificación de estado
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB, Mercado Pago & Brevo)' });
+  res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB, Mercado Pago, Brevo & Cloudflare R2)' });
 });
 
 // Inicialización del Servidor
