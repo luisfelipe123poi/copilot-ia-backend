@@ -228,7 +228,7 @@ async function validarLicencia(req, res, next) {
     }
   }
 
-  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens
+  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens (sin incrementar aquí)
   if (user.status === 'trial') {
     const totalUsado = user.tokensUsados !== undefined ? user.tokensUsados : user.usageCount;
     const limiteActual = user.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
@@ -240,9 +240,6 @@ async function validarLicencia(req, res, next) {
         limiteAgotado: true
       });
     }
-    user.tokensUsados = totalUsado + 1;
-    user.usageCount = user.tokensUsados;
-    await user.save();
   } else if (user.status === 'active') {
     if (new Date(user.expiresAt) < new Date()) {
       user.status = 'expired';
@@ -259,6 +256,8 @@ async function validarLicencia(req, res, next) {
     });
   }
 
+  // Adjuntamos el documento del usuario a la petición para incrementar de forma única al generar la respuesta
+  req.userLicenseDoc = user;
   next();
 }
 
@@ -568,7 +567,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     }
 
     // 🔎 LOG FINAL DE PAYLOAD ENVIADO A OPENAI
-    console.log('🤖 Payload final de messages enviado à OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
+    console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -578,6 +577,15 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     });
 
     const respuestaIA = completion.choices[0].message.content.trim();
+
+    // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL
+    if (req.userLicenseDoc && req.userLicenseDoc.status === 'trial') {
+      const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : req.userLicenseDoc.usageCount;
+      req.userLicenseDoc.tokensUsados = currentTokens + 1;
+      req.userLicenseDoc.usageCount = req.userLicenseDoc.tokensUsados;
+      await req.userLicenseDoc.save();
+    }
+
     return res.json({ respuesta: respuestaIA });
 
   } catch (error) {
