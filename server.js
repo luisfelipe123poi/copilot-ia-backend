@@ -57,7 +57,7 @@ Somos una empresa que ofrece soluciones de software, páginas web, soporte técn
 Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
 `;
 
-const USAGE_LIMIT_FREE_TRIAL = 300;
+const USAGE_LIMIT_FREE_TRIAL = 3;
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -163,7 +163,7 @@ app.post('/api/generar-prueba', async (req, res) => {
       licenseKey: licenseKey,
       status: 'trial',
       plan: 'Prueba Gratuita',
-      limiteTokens: 300,
+      limiteTokens: 3,
       tokensUsados: 0,
       usageCount: 0,
       expiresAt: expiresAt
