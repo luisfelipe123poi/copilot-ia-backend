@@ -34,7 +34,10 @@ const licenseSchema = new mongoose.Schema({
   status: { type: String, enum: ['trial', 'active', 'expired', 'inactive'], default: 'trial' },
   usageCount: { type: Number, default: 0 },
   email: { type: String, required: true },
-  expiresAt: { type: Date, required: true }
+  expiresAt: { type: Date, required: true },
+  limiteTokens: { type: Number, default: 300 },
+  tokensUsados: { type: Number, default: 0 },
+  plan: { type: String, default: 'Prueba Gratuita' }
 });
 const License = mongoose.model('License', licenseSchema);
 
@@ -54,9 +57,9 @@ Somos una empresa que ofrece soluciones de software, páginas web, soporte técn
 Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
 `;
 
-const USAGE_LIMIT_FREE_TRIAL = 1000;
+const USAGE_LIMIT_FREE_TRIAL = 300;
 
-// Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6)
+// Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
   const bytes = crypto.randomBytes(6).toString('hex').toUpperCase();
   const part1 = bytes.substring(0, 4);
@@ -68,7 +71,7 @@ function generateLicenseKey(prefix = 'PRES') {
 // ==========================================
 // FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
 // ==========================================
-async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
+async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀', contenidoHtml = null) {
   const brevoApiKey = process.env.BREVO_API_KEY;
   
   if (!brevoApiKey) {
@@ -76,18 +79,7 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
     return;
   }
 
-  const payload = {
-    sender: {
-      name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
-      email: process.env.BREVO_SENDER_EMAIL || 'no-reply@prestigecloser.com'
-    },
-    to: [
-      {
-        email: destinatarioEmail
-      }
-    ],
-    subject: '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀',
-    htmlContent: `
+  const htmlFinal = contenidoHtml || `
       <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
         <h2 style="color: #4f46e5;">¡Gracias por activar tu suscripción! 🎉</h2>
         <p>Hola,</p>
@@ -100,7 +92,20 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
         <p style="font-size: 12px; color: #6b7280;">Si tienes alguna duda o necesitas soporte, responde directamente a este correo.</p>
       </div>
-    `
+    `;
+
+  const payload = {
+    sender: {
+      name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
+      email: process.env.BREVO_SENDER_EMAIL || 'no-reply@prestigecloser.com'
+    },
+    to: [
+      {
+        email: destinatarioEmail
+      }
+    ],
+    subject: asunto,
+    htmlContent: htmlFinal
   };
 
   try {
@@ -126,6 +131,74 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey) {
 }
 
 // ==========================================
+// ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
+// ==========================================
+app.post('/api/generar-prueba', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'El correo es obligatorio.' });
+    }
+
+    // 1. Verificar si el correo ya pidió su prueba o tiene una licencia
+    const licenciaExistente = await License.findOne({ email });
+    if (licenciaExistente) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Este correo ya cuenta con una licencia o prueba registrada.' 
+      });
+    }
+
+    // 2. Generar la clave de prueba gratuita
+    const licenseKey = generateLicenseKey('FREE');
+
+    // 3. Definir expiración (ej. 30 días o tiempo ilimitado hasta agotar tokens)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // 4. Guardar en MongoDB con el límite de 300 respuestas
+    const nuevaLicencia = new License({
+      email: email,
+      licenseKey: licenseKey,
+      status: 'trial',
+      plan: 'Prueba Gratuita',
+      limiteTokens: 300,
+      tokensUsados: 0,
+      usageCount: 0,
+      expiresAt: expiresAt
+    });
+    await nuevaLicencia.save();
+
+    // 5. Enviar el correo con la clave de prueba
+    const htmlContenido = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
+            <h2 style="color: #28a745;">¡Bienvenido a Copilot.ai! 🚀</h2>
+            <p>Has solicitado tu prueba gratuita de 300 respuestas.</p>
+            <p>Tu clave de activación única es:</p>
+            <div style="background-color: #e8f5e9; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #2e7d32; letter-spacing: 2px; margin: 20px 0;">
+              ${licenseKey}
+            </div>
+            <p>Copia y pega esta clave en la extensión de Chrome para activar tu cuenta de prueba.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+            <p style="font-size: 12px; color: #6b7280;">Al agotar tus respuestas, podrás adquirir un plan Pro para seguir disfrutando del servicio.</p>
+        </div>
+    `;
+
+    await enviarCorreoBrevo(email, licenseKey, 'Tu clave de prueba gratuita para Copilot.ai 🎁', htmlContenido);
+
+    return res.json({ 
+      success: true, 
+      message: '¡Prueba creada! Revisa tu correo para obtener tu clave.' 
+    });
+
+  } catch (error) {
+    console.error('Error generando prueba gratuita:', error);
+    return res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+  }
+});
+
+// ==========================================
 // MIDDLEWARE: Validación de Licencia / Free Trial en MongoDB
 // ==========================================
 async function validarLicencia(req, res, next) {
@@ -133,28 +206,42 @@ async function validarLicencia(req, res, next) {
 
   let user = await License.findOne({ licenseKey });
 
-  // Inicializar usuario en MongoDB si no existe
+  // Inicializar usuario temporal en MongoDB si no existe la clave por defecto
   if (!user) {
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-    user = await License.create({
-      licenseKey,
-      status: 'trial',
-      usageCount: 0,
-      email: 'trial_user@system.local',
-      expiresAt
-    });
-  }
-
-  // Si está en prueba gratuita, validar el límite de respuestas
-  if (user.status === 'trial') {
-    if (user.usageCount >= USAGE_LIMIT_FREE_TRIAL) {
+    if (licenseKey === 'TRIAL_KEY') {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      user = await License.create({
+        licenseKey,
+        status: 'trial',
+        usageCount: 0,
+        limiteTokens: USAGE_LIMIT_FREE_TRIAL,
+        tokensUsados: 0,
+        email: 'trial_user@system.local',
+        expiresAt
+      });
+    } else {
       return res.status(403).json({
-        error: `Has agotado tus ${USAGE_LIMIT_FREE_TRIAL} respuestas de prueba. ¡Activa tu plan Pro para continuar!`,
-        code: 'TRIAL_EXPIRED'
+        error: 'Clave de licencia inválida o no encontrada.',
+        code: 'INVALID_LICENSE'
       });
     }
-    user.usageCount += 1;
+  }
+
+  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens
+  if (user.status === 'trial') {
+    const totalUsado = user.tokensUsados !== undefined ? user.tokensUsados : user.usageCount;
+    const limiteActual = user.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
+
+    if (totalUsado >= limiteActual) {
+      return res.status(403).json({
+        error: `Has agotado tus ${limiteActual} respuestas de prueba. ¡Adquiere un plan en nuestra web para continuar!`,
+        code: 'TRIAL_EXPIRED',
+        limiteAgotado: true
+      });
+    }
+    user.tokensUsados = totalUsado + 1;
+    user.usageCount = user.tokensUsados;
     await user.save();
   } else if (user.status === 'active') {
     if (new Date(user.expiresAt) < new Date()) {
@@ -162,7 +249,7 @@ async function validarLicencia(req, res, next) {
       await user.save();
       return res.status(403).json({
         error: 'Tu suscripción ha expirado. Por favor renueva tu plan.',
-        code: 'TRIAL_EXPIRED'
+        code: 'SUBSCRIPTION_EXPIRED'
       });
     }
   } else {
@@ -481,7 +568,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     }
 
     // 🔎 LOG FINAL DE PAYLOAD ENVIADO A OPENAI
-    console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
+    console.log('🤖 Payload final de messages enviado à OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -572,9 +659,6 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 // ==========================================
 // RUTA: /api/crear-preferencia-mp
 // ==========================================
-// ==========================================
-// RUTA: /api/crear-preferencia-mp
-// ==========================================
 app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
@@ -654,16 +738,29 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
     });
 
     if (usuarioBD && (usuarioBD.status === 'active' || usuarioBD.status === 'trial')) {
+      const limite = usuarioBD.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
+      const usados = usuarioBD.tokensUsados !== undefined ? usuarioBD.tokensUsados : usuarioBD.usageCount;
+      
+      if (usuarioBD.status === 'trial' && usados >= limite) {
+        return res.json({ 
+          activo: false, 
+          limiteAgotado: true,
+          error: 'Has agotado tus respuestas de prueba.'
+        });
+      }
+
       return res.json({ 
+        valida: true,
         activo: true, 
-        plan: usuarioBD.status === 'trial' ? 'starter' : 'pro'
+        plan: usuarioBD.plan || (usuarioBD.status === 'trial' ? 'Prueba Gratuita' : 'pro'),
+        tokensRestantes: limite - usados
       });
     }
 
-    return res.json({ activo: false });
+    return res.json({ valida: false, activo: false, error: 'Clave no encontrada o inactiva.' });
   } catch (error) {
     console.error('Error verificando suscripción:', error.message);
-    res.status(500).json({ error: 'Error verificando suscripción' });
+    res.status(500).json({ valida: false, error: 'Error verificando suscripción' });
   }
 });
 
@@ -693,6 +790,7 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
           if (usuario) {
             usuario.status = 'active';
+            usuario.plan = 'Pro (Mercado Pago)';
             usuario.expiresAt = expiresAt;
             await usuario.save();
             console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
@@ -701,7 +799,10 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
             await License.create({
               licenseKey: newLicenseKey,
               status: 'active',
+              plan: 'Pro (Mercado Pago)',
               usageCount: 0,
+              tokensUsados: 0,
+              limiteTokens: 999999,
               email: payerEmail || 'suscriptor_mercadopago@local',
               expiresAt
             });
@@ -744,18 +845,32 @@ app.get('/api/validar-licencia', async (req, res) => {
       });
     }
 
-    const esValida = licenseKey.startsWith('PRES-'); 
+    const usuarioBD = await License.findOne({ licenseKey });
+    if (!usuarioBD) {
+      return res.status(403).json({ activo: false, mensaje: 'Licencia no encontrada' });
+    }
 
-    if (esValida) {
+    const limite = usuarioBD.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
+    const usados = usuarioBD.tokensUsados !== undefined ? usuarioBD.tokensUsados : usuarioBD.usageCount;
+
+    if (usuarioBD.status === 'trial' && usados >= limite) {
+      return res.status(403).json({ 
+        activo: false, 
+        limiteAgotado: true,
+        mensaje: 'Has agotado tus respuestas de prueba gratuitas' 
+      });
+    }
+
+    if (usuarioBD.status === 'active' || usuarioBD.status === 'trial') {
       return res.json({ 
         activo: true, 
-        plan: 'pro', 
+        plan: usuarioBD.plan || 'pro', 
         mensaje: 'Licencia activa' 
       });
     } else {
       return res.status(403).json({ 
         activo: false, 
-        mensaje: 'Licencia vencida o no encontrada' 
+        mensaje: 'Licencia vencida o inactiva' 
       });
     }
   } catch (error) {
