@@ -35,7 +35,7 @@ const licenseSchema = new mongoose.Schema({
   usageCount: { type: Number, default: 0 },
   email: { type: String, required: true },
   expiresAt: { type: Date, required: true },
-  limiteTokens: { type: Number, default: 300 },
+  limiteTokens: { type: Number, default: 7 },
   tokensUsados: { type: Number, default: 0 },
   plan: { type: String, default: 'Prueba Gratuita' }
 });
