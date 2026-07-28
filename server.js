@@ -97,7 +97,7 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
   const payload = {
     sender: {
       name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
-      email: process.env.BREVO_SENDER_EMAIL || 'no-reply@prestigecloser.com'
+      email: process.env.BREVO_SENDER_EMAIL || 'copilot.ia@prestigecloser.com' // <-- Sustitúyelo aquí
     },
     to: [
       {
