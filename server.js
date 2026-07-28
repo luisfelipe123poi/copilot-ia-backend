@@ -202,13 +202,12 @@ app.post('/api/generar-prueba', async (req, res) => {
 // MIDDLEWARE: Validación de Licencia / Free Trial en MongoDB
 // ==========================================
 async function validarLicencia(req, res, next) {
-  // Limpiamos los espacios en blanco de la cabecera por seguridad
   const rawLicenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
   const licenseKey = rawLicenseKey.trim();
 
   let user = await License.findOne({ licenseKey });
 
-  // Inicializar usuario temporal en MongoDB si no existe la clave por defecto
+  // 1. Si la licencia NO existe en absoluto en la base de datos
   if (!user) {
     if (licenseKey === 'TRIAL_KEY') {
       const expiresAt = new Date();
@@ -223,14 +222,15 @@ async function validarLicencia(req, res, next) {
         expiresAt
       });
     } else {
+      // AQUÍ SÍ va el error de que el código no existe en el sistema / Mercado Pago
       return res.status(403).json({
-        error: 'No encontramos una suscripción activa o clave válida con este dato en el sistema.',
+        error: '❌ No encontramos una suscripción activa o clave válida con este dato en el sistema.',
         code: 'INVALID_LICENSE'
       });
     }
   }
 
-  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens
+  // 2. Si la licencia SÍ existe, procedemos a validar su estado de vigencia
   if (user.status === 'trial') {
     const totalUsado = user.tokensUsados !== undefined ? user.tokensUsados : user.usageCount;
     const limiteActual = user.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
@@ -242,23 +242,24 @@ async function validarLicencia(req, res, next) {
         limiteAgotado: true
       });
     }
-  } else if (user.status === 'active') {
-    if (new Date(user.expiresAt) < new Date()) {
+  } else if (user.status === 'active' || user.status === 'suscrito') {
+    if (user.expiresAt && new Date(user.expiresAt) < new Date()) {
       user.status = 'expired';
       await user.save();
       return res.status(403).json({
-        error: 'Tu suscripción ha expirado. Por favor renueva tu plan.',
+        error: 'Tu suscripción ha expirado. Por favor renueva tu plan en la web.',
         code: 'SUBSCRIPTION_EXPIRED'
       });
     }
   } else {
+    // Licencia encontrada pero inactiva, pausada o vencida
     return res.status(403).json({ 
-      error: 'Tu suscripción no está activa o se encuentra pausada en Mercado Pago.',
+      error: 'Tu suscripción no está activa o se encuentra pausada. Renueva tu plan para seguir operando.',
       code: 'SUBSCRIPTION_INACTIVE'
     });
   }
 
-  // Adjuntamos el documento del usuario a la petición
+  // Adjuntamos el documento del usuario a la petición si todo es correcto
   req.userLicenseDoc = user;
   next();
 }
