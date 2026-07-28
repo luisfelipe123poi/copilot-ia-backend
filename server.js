@@ -202,7 +202,9 @@ app.post('/api/generar-prueba', async (req, res) => {
 // MIDDLEWARE: Validación de Licencia / Free Trial en MongoDB
 // ==========================================
 async function validarLicencia(req, res, next) {
-  const licenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
+  // Limpiamos los espacios en blanco de la cabecera por seguridad
+  const rawLicenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
+  const licenseKey = rawLicenseKey.trim();
 
   let user = await License.findOne({ licenseKey });
 
@@ -222,13 +224,13 @@ async function validarLicencia(req, res, next) {
       });
     } else {
       return res.status(403).json({
-        error: 'Clave de licencia inválida o no encontrada.',
+        error: 'No encontramos una suscripción activa o clave válida con este dato en el sistema.',
         code: 'INVALID_LICENSE'
       });
     }
   }
 
-  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens (sin incrementar aquí)
+  // Si está en prueba gratuita o trial, validar el límite de respuestas/tokens
   if (user.status === 'trial') {
     const totalUsado = user.tokensUsados !== undefined ? user.tokensUsados : user.usageCount;
     const limiteActual = user.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
@@ -251,12 +253,12 @@ async function validarLicencia(req, res, next) {
     }
   } else {
     return res.status(403).json({ 
-      error: 'Tu suscripción no está activa. Revisa tu estado de pago.',
+      error: 'Tu suscripción no está activa o se encuentra pausada en Mercado Pago.',
       code: 'SUBSCRIPTION_INACTIVE'
     });
   }
 
-  // Adjuntamos el documento del usuario a la petición para incrementar de forma única al generar la respuesta
+  // Adjuntamos el documento del usuario a la petición
   req.userLicenseDoc = user;
   next();
 }
