@@ -424,6 +424,26 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       return res.status(400).json({ error: 'El parámetro "mensajeCliente" is obligatorio.' });
     }
 
+    // 🛡️ VALIDACIÓN EXTRA DE LÍMITE DE TOKENS / TRIAL ANTES DE PROCESAR
+    if (req.userLicenseDoc) {
+      const tokensUsados = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
+      const limiteTokens = req.userLicenseDoc.limiteTokens !== undefined ? req.userLicenseDoc.limiteTokens : 20; // Ajusta el límite si es diferente en tu modelo
+
+      if (req.userLicenseDoc.status === 'trial' && tokensUsados >= limiteTokens) {
+        return res.status(403).json({
+          code: 'TRIAL_EXPIRED',
+          error: 'Has agotado tus tokens gratuitos de prueba. Por favor, adquiere una licencia o suscripción para continuar disfrutando del servicio.'
+        });
+      }
+
+      if (req.userLicenseDoc.status === 'expired' || req.userLicenseDoc.status === 'inactive' || req.userLicenseDoc.suspended) {
+        return res.status(403).json({
+          code: 'SUBSCRIPTION_EXPIRED',
+          error: 'Tu suscripción se encuentra inactiva o vencida. Renueva tu licencia para seguir usando la extensión.'
+        });
+      }
+    }
+
     // CASO ESPECIAL: Análisis de Lectura / Explicación
     if (tipoAccion === 'analizar_explicar') {
       let conversacionContexto = '';
@@ -583,7 +603,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 
     // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL
     if (req.userLicenseDoc && req.userLicenseDoc.status === 'trial') {
-      const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : req.userLicenseDoc.usageCount;
+      const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
       req.userLicenseDoc.tokensUsados = currentTokens + 1;
       req.userLicenseDoc.usageCount = req.userLicenseDoc.tokensUsados;
       await req.userLicenseDoc.save();
