@@ -783,32 +783,18 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
   const { id } = req.query; // Puede ser el email o la licenseKey del usuario
 
   try {
-    // Si no se provee un ID, se evalúa inmediatamente como un usuario Free / Invitado
-    if (!id || id === 'free-user' || id.trim() === '') {
-      return res.json({ 
-        valida: true,
-        activo: true, 
-        plan: 'Free',
-        limiteTokens: 500,
-        tokensRestantes: 500
-      });
-    }
-
     const usuarioBD = await License.findOne({ 
       $or: [{ email: id }, { licenseKey: id }] 
     });
 
-    // Si el usuario existe en la base de datos y está activo o en trial
     if (usuarioBD && (usuarioBD.status === 'active' || usuarioBD.status === 'trial')) {
-      const limite = usuarioBD.limiteTokens || (usuarioBD.status === 'trial' ? USAGE_LIMIT_FREE_TRIAL : 500);
-      const usados = usuarioBD.tokensUsados !== undefined ? usuarioBD.tokensUsados : (usuarioBD.usageCount || 0);
+      const limite = usuarioBD.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
+      const usados = usuarioBD.tokensUsados !== undefined ? usuarioBD.tokensUsados : usuarioBD.usageCount;
       
       if (usuarioBD.status === 'trial' && usados >= limite) {
         return res.json({ 
-          valida: false,
           activo: false, 
           limiteAgotado: true,
-          plan: 'Prueba Gratuita',
           error: 'Has agotado tus respuestas de prueba.'
         });
       }
@@ -816,28 +802,15 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
       return res.json({ 
         valida: true,
         activo: true, 
-        plan: usuarioBD.plan || (usuarioBD.status === 'trial' ? 'Prueba Gratuita' : 'Pro'),
-        tokensRestantes: Math.max(0, limite - usados)
+        plan: usuarioBD.plan || (usuarioBD.status === 'trial' ? 'Prueba Gratuita' : 'pro'),
+        tokensRestantes: limite - usados
       });
     }
 
-    // Si no se encuentra en BD o está inactivo, por defecto se otorga el nivel Free base en lugar de bloquear tajantemente
-    return res.json({ 
-      valida: true, 
-      activo: true, 
-      plan: 'Free',
-      tokensRestantes: 500,
-      error: 'Clave no encontrada o inactiva. Usando plan Free.' 
-    });
-
+    return res.json({ valida: false, activo: false, error: 'Clave no encontrada o inactiva.' });
   } catch (error) {
     console.error('Error verificando suscripción:', error.message);
-    return res.status(500).json({ 
-      valida: false, 
-      activo: false, 
-      plan: 'Free',
-      error: 'Error verificando suscripción' 
-    });
+    res.status(500).json({ valida: false, error: 'Error verificando suscripción' });
   }
 });
 
