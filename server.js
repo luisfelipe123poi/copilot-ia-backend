@@ -397,7 +397,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT 2: Generar Respuesta Universal (Con MAPEO CORRECTO DE ROLES)
+// ENDPOINT 2: Generar Respuesta Universal (Con Mensajes Personalizados por Tipo de Licencia)
 // ==========================================
 app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
@@ -421,25 +421,44 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     console.log('===================================================================\n');
 
     if (!mensajeCliente) {
-      return res.status(400).json({ error: 'El parámetro "mensajeCliente" is obligatorio.' });
+      return res.status(400).json({ error: 'El parámetro "mensajeCliente" es obligatorio.' });
     }
 
-    // 🛡️ VALIDACIÓN EXTRA DE LÍMITE DE TOKENS / TRIAL ANTES DE PROCESAR
+    // 🛡️ VALIDACIÓN Y DIFERENCIACIÓN SEGÚN TIPO DE PLAN / LICENCIA
     if (req.userLicenseDoc) {
+      const tipoLicencia = (req.userLicenseDoc.tipo || req.userLicenseDoc.status || 'trial').toLowerCase();
       const tokensUsados = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
-      const limiteTokens = req.userLicenseDoc.limiteTokens !== undefined ? req.userLicenseDoc.limiteTokens : 20; // Ajusta el límite si es diferente en tu modelo
+      const limiteTokens = req.userLicenseDoc.limiteTokens !== undefined ? req.userLicenseDoc.limiteTokens : 20;
 
-      if (req.userLicenseDoc.status === 'trial' && tokensUsados >= limiteTokens) {
+      // 1. Si es TRIAL y agotó sus tokens gratuitos
+      if (tipoLicencia === 'trial' && tokensUsados >= limiteTokens) {
         return res.status(403).json({
           code: 'TRIAL_EXPIRED',
-          error: 'Has agotado tus tokens gratuitos de prueba. Por favor, adquiere una licencia o suscripción para continuar disfrutando del servicio.'
+          error: 'Has consumido todos tus mensajes de prueba gratuita. Activa el Plan Starter o Pro para seguir automatizando tus ventas sin límites.'
         });
       }
 
-      if (req.userLicenseDoc.status === 'expired' || req.userLicenseDoc.status === 'inactive' || req.userLicenseDoc.suspended) {
+      // 2. Si es STARTER y agotó sus tokens del mes
+      if (tipoLicencia === 'starter' && tokensUsados >= limiteTokens) {
+        return res.status(403).json({
+          code: 'STARTER_EXPIRED',
+          error: 'Has alcanzado el límite de mensajes de tu Plan Starter este mes. Actualiza al Plan Pro o renueva tu ciclo para continuar.'
+        });
+      }
+
+      // 3. Si es PRO y agotó sus tokens del mes
+      if (tipoLicencia === 'pro' && tokensUsados >= limiteTokens) {
+        return res.status(403).json({
+          code: 'PRO_EXPIRED',
+          error: 'Has llegado al límite de mensajes permitidos en tu Plan Pro para este período. Contacta con soporte o adquiere una recarga.'
+        });
+      }
+
+      // 4. Si la suscripción general está vencida, inactiva o suspendida
+      if (tipoLicencia === 'expired' || tipoLicencia === 'inactive' || req.userLicenseDoc.suspended) {
         return res.status(403).json({
           code: 'SUBSCRIPTION_EXPIRED',
-          error: 'Tu suscripción se encuentra inactiva o vencida. Renueva tu licencia para seguir usando la extensión.'
+          error: 'Tu suscripción mensual se encuentra inactiva o pendiente de pago. Ponte al día para seguir usando Copilot.AI.'
         });
       }
     }
@@ -601,8 +620,8 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 
     const respuestaIA = completion.choices[0].message.content.trim();
 
-    // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL
-    if (req.userLicenseDoc && req.userLicenseDoc.status === 'trial') {
+    // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL / PLANES
+    if (req.userLicenseDoc) {
       const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
       req.userLicenseDoc.tokensUsados = currentTokens + 1;
       req.userLicenseDoc.usageCount = req.userLicenseDoc.tokensUsados;
