@@ -199,11 +199,32 @@ app.post('/api/generar-prueba', async (req, res) => {
 });
 
 // ==========================================
+// CONFIGURACIÓN MODO DESARROLLADOR / PRUEBAS
+// ==========================================
+const DEV_MASTER_KEY = "DEV-PRO-2026-UNLIMITED";
+
+// ==========================================
 // MIDDLEWARE: Validación de Licencia / Free Trial en MongoDB
 // ==========================================
 async function validarLicencia(req, res, next) {
   const rawLicenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
   const licenseKey = rawLicenseKey.trim();
+
+  // ------------------------------------------------------------------
+  // ⚡ MODO PRUEBAS: Bypass si se usa la Key Maestra de Desarrollador
+  // ------------------------------------------------------------------
+  if (licenseKey === DEV_MASTER_KEY) {
+    req.userLicenseDoc = {
+      licenseKey: DEV_MASTER_KEY,
+      status: 'active',
+      plan: 'Desarrollador (Ilimitado)',
+      limiteTokens: 999999,
+      tokensUsados: 0,
+      save: async () => {} // Función dummy vacía para que no lance error si el endpoint intenta hacer .save()
+    };
+    return next();
+  }
+  // ------------------------------------------------------------------
 
   let user = await License.findOne({ licenseKey });
 
@@ -263,7 +284,6 @@ async function validarLicencia(req, res, next) {
   req.userLicenseDoc = user;
   next();
 }
-
 // ==========================================
 // ENDPOINT NUEVO: Generador de System Prompt Personalizado (Meta-Prompt)
 // ==========================================
@@ -885,7 +905,20 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
 app.get('/api/validar-licencia', async (req, res) => {
   try {
-    const licenseKey = req.headers['x-user-license'];
+    const rawLicenseKey = req.headers['x-user-license'];
+    const licenseKey = rawLicenseKey ? rawLicenseKey.trim() : '';
+
+    // ------------------------------------------------------------------
+    // ⚡ MODO PRUEBAS: Responder como activa si se usa la Key Maestra
+    // ------------------------------------------------------------------
+    if (licenseKey === DEV_MASTER_KEY) {
+      return res.json({ 
+        activo: true, 
+        plan: 'pro', 
+        mensaje: 'Licencia de desarrollo ilimitada activa' 
+      });
+    }
+    // ------------------------------------------------------------------
 
     if (!licenseKey || licenseKey === 'TRIAL_KEY') {
       return res.status(401).json({ 
