@@ -799,6 +799,21 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
 app.get('/api/verificar-suscripcion', async (req, res) => {
   const { id } = req.query; // Puede ser el email o la licenseKey del usuario
 
+  // ------------------------------------------------------------------
+  // ⚡ MODO PRUEBAS: Respuesta idéntica a Plan Pro si se usa la Key Maestra
+  // ------------------------------------------------------------------
+  if (id && id.trim() === DEV_MASTER_KEY) {
+    return res.json({ 
+      valida: true,
+      activo: true, 
+      plan: 'pro',
+      tokensRestantes: 999999,
+      incluyeAudio: true,
+      limiteRespuestasDia: 999999
+    });
+  }
+  // ------------------------------------------------------------------
+
   try {
     const usuarioBD = await License.findOne({ 
       $or: [{ email: id }, { licenseKey: id }] 
