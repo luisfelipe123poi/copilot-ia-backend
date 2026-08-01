@@ -211,16 +211,16 @@ async function validarLicencia(req, res, next) {
   const licenseKey = rawLicenseKey.trim();
 
   // ------------------------------------------------------------------
-  // ⚡ MODO PRUEBAS: Bypass si se usa la Key Maestra de Desarrollador
+  // ⚡ MODO PRUEBAS: Bypass idéntico a una Suscripción Pro Activa
   // ------------------------------------------------------------------
   if (licenseKey === DEV_MASTER_KEY) {
     req.userLicenseDoc = {
       licenseKey: DEV_MASTER_KEY,
       status: 'active',
-      plan: 'Desarrollador (Ilimitado)',
+      plan: 'Pro (Mercado Pago)',
       limiteTokens: 999999,
       tokensUsados: 0,
-      save: async () => {} // Función dummy vacía para que no lance error si el endpoint intenta hacer .save()
+      save: async () => {} // Función dummy vacía
     };
     return next();
   }
@@ -243,7 +243,6 @@ async function validarLicencia(req, res, next) {
         expiresAt
       });
     } else {
-      // AQUÍ SÍ va el error de que el código no existe en el sistema / Mercado Pago
       return res.status(403).json({
         error: '❌ No encontramos una suscripción activa o clave válida con este dato en el sistema.',
         code: 'INVALID_LICENSE'
@@ -273,14 +272,12 @@ async function validarLicencia(req, res, next) {
       });
     }
   } else {
-    // Licencia encontrada pero inactiva, pausada o vencida
     return res.status(403).json({ 
       error: 'Tu suscripción no está activa o se encuentra pausada. Renueva tu plan para seguir operando.',
       code: 'SUBSCRIPTION_INACTIVE'
     });
   }
 
-  // Adjuntamos el documento del usuario a la petición si todo es correcto
   req.userLicenseDoc = user;
   next();
 }
@@ -909,13 +906,15 @@ app.get('/api/validar-licencia', async (req, res) => {
     const licenseKey = rawLicenseKey ? rawLicenseKey.trim() : '';
 
     // ------------------------------------------------------------------
-    // ⚡ MODO PRUEBAS: Responder como activa si se usa la Key Maestra
+    // ⚡ MODO PRUEBAS: Devuelve el mismo estado de un usuario Pro
     // ------------------------------------------------------------------
     if (licenseKey === DEV_MASTER_KEY) {
       return res.json({ 
         activo: true, 
         plan: 'pro', 
-        mensaje: 'Licencia de desarrollo ilimitada activa' 
+        mensaje: 'Licencia Pro activa (Dev)',
+        limiteRespuestasDia: 999999,
+        incluyeAudio: true
       });
     }
     // ------------------------------------------------------------------
