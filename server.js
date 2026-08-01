@@ -654,6 +654,78 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 });
 
 // ==========================================
+// ENDPOINT NUEVO: Crear Licencias de Feedback (Admin)
+// ==========================================
+app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
+  console.log('📥 [BACKEND] Petición recibida en /api/admin/crear-licencia-feedback');
+  console.log('📦 [BACKEND] Body recibido:', req.body);
+
+  try {
+    const { email, durationDays, maxActivations, adminSecret } = req.body;
+
+    // Validar contraseña de administrador
+    if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
+      console.warn('❌ [BACKEND] Intento de acceso no autorizado con secret:', adminSecret);
+      return res.status(403).json({ success: false, error: 'No autorizado. Admin secret incorrecto.' });
+    }
+
+    if (!email || !durationDays || !maxActivations) {
+      console.warn('❌ [BACKEND] Faltan parámetros en la petición.');
+      return res.status(400).json({ success: false, error: 'Faltan parámetros (email, durationDays, maxActivations).' });
+    }
+
+    const licenseKey = generateLicenseKey('FB');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + Number(durationDays));
+
+    const nuevaLicencia = new License({
+      licenseKey,
+      email,
+      status: 'active',
+      durationDays: Number(durationDays),
+      maxActivations: Number(maxActivations),
+      currentActivations: 0,
+      limiteTokens: 999999,
+      plan: `Feedback ${durationDays} Días (${maxActivations === 1 ? 'Individual' : `Grupal ${maxActivations}`})`,
+      expiresAt
+    });
+
+    await nuevaLicencia.save();
+    console.log(`✅ [BACKEND] Licencia creada y guardada en MongoDB: ${licenseKey} para ${email}`);
+
+    // Enviar correo automático con Brevo
+    try {
+      const htmlContenido = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
+          <h2 style="color: #4f46e5;">¡Acceso Exclusivo de Feedback - Copilot.ai! 🚀</h2>
+          <p>Hola,</p>
+          <p>Te hemos seleccionado para probar en primicia nuestra extensión y ayudarnos con tu feedback estratégico.</p>
+          <p>Tu clave de acceso (${durationDays} días, hasta ${maxActivations} cuentas) es:</p>
+          <div style="background-color: #e0e7ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #3730a3; letter-spacing: 2px; margin: 20px 0;">
+            ${licenseKey}
+          </div>
+          <p>Copia esta clave y pégala en la configuración de tu extensión.</p>
+        </div>
+      `;
+      await enviarCorreoBrevo(email, licenseKey, 'Tu acceso exclusivo de feedback 🎁', htmlContenido);
+    } catch (mailErr) {
+      console.warn('⚠️ [BACKEND] La licencia se creó pero falló el envío de correo:', mailErr.message);
+    }
+
+    return res.json({ 
+      success: true, 
+      message: 'Licencia de feedback creada con éxito.', 
+      licenseKey,
+      details: { durationDays, maxActivations, expiresAt }
+    });
+
+  } catch (error) {
+    console.error('❌ [BACKEND ERROR] Error interno procesando licencia:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Error interno del servidor.' });
+  }
+});
+
+// ==========================================
 // NUEVO ENDPOINT: Transcribir Audio del Cliente (OpenAI Whisper)
 // ==========================================
 app.post('/api/transcribir-audio-cliente', upload.single('audio'), async (req, res) => {
