@@ -281,6 +281,70 @@ async function validarLicencia(req, res, next) {
   req.userLicenseDoc = user;
   next();
 }
+
+// ==========================================
+// ENDPOINT B2B: Crear Suscripción Recurrente Corporativa (Mercado Pago Preapproval)
+// ==========================================
+app.post('/api/admin/crear-checkout-b2b', async (req, res) => {
+  try {
+    const { empresaNombre, emailContacto, cantidadLicencias, precioTotalUSD, adminSecret } = req.body;
+
+    if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
+      return res.status(403).json({ success: false, error: 'No autorizado.' });
+    }
+
+    if (!emailContacto || !cantidadLicencias || !precioTotalUSD) {
+      return res.status(400).json({ success: false, error: 'Faltan parámetros obligatorios para la cotización B2B.' });
+    }
+
+    // Obtener tasa de cambio USD a COP (o puedes manejarlo directamente en USD si tu cuenta lo soporta)
+    let tasaCambio = 4000;
+    try {
+      const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
+      if (responseTasa.ok) {
+        const dataTasa = await responseTasa.json();
+        if (dataTasa?.rates?.COP) tasaCambio = dataTasa.rates.COP;
+      }
+    } catch (e) {
+      console.warn('Usando tasa de cambio por defecto.');
+    }
+
+    const precioFinalCOP = Math.round(Number(precioTotalUSD) * tasaCambio);
+    const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
+
+    // Crear suscripción PreApproval en Mercado Pago para la empresa
+    const preApproval = new PreApproval(mpClient);
+    const result = await preApproval.create({
+      body: {
+        reason: `Plan Empresarial B2B - ${empresaNombre} (${cantidadLicencias} Cuentas)`,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: 'months', // Cobro mensual recurrente
+          transaction_amount: Number(precioFinalCOP),
+          currency_id: 'COP'
+        },
+        back_url: `${frontendUrl}/gracias.html`,
+        payer_email: emailContacto,
+        status: 'pending',
+        // Pasamos metadata o parámetros en el external_reference para identificar el pedido en el Webhook
+        external_reference: JSON.stringify({
+          tipo: 'b2b',
+          empresaNombre,
+          cantidadLicencias: Number(cantidadLicencias)
+        }),
+        notification_url: `${backendUrl}/api/webhook-mercadopago`
+      }
+    });
+
+    console.log(`🔗 [B2B CHECKOUT] Enlace de pago generado para ${empresaNombre}: ${result.init_point}`);
+    return res.json({ success: true, init_point: result.init_point });
+
+  } catch (error) {
+    console.error('❌ Error al crear checkout B2B:', error.message);
+    return res.status(500).json({ success: false, error: 'Error al procesar la suscripción corporativa.' });
+  }
+});
 // ==========================================
 // ENDPOINT NUEVO: Generador de System Prompt Personalizado (Meta-Prompt)
 // ==========================================
@@ -919,7 +983,7 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT WEBHOOK: Mercado Pago + Brevo (Integrado)
+// ENDPOINT WEBHOOK: Mercado Pago + Brevo (Integrado con B2B y Usuarios Individuales)
 // ==========================================
 app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
@@ -938,33 +1002,84 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
         // 1. SI ESTÁ AUTORIZADO (PAGO EXITOSO O NUEVA SUSCRIPCIÓN)
         if (status === 'authorized') {
-          let usuario = await License.findOne({ email: payerEmail });
           const expiresAt = new Date();
           expiresAt.setDate(expiresAt.getDate() + 35); // Extiende 35 días
 
-          if (usuario) {
-            usuario.status = 'active';
-            usuario.plan = 'Pro (Mercado Pago)';
-            usuario.expiresAt = expiresAt;
-            await usuario.save();
-            console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
-          } else {
-            const newLicenseKey = generateLicenseKey('PRES');
-            await License.create({
+          // Verificar si trae datos corporativos en el external_reference
+          let datosB2B = null;
+          try {
+            if (subscriptionInfo.external_reference) {
+              datosB2B = JSON.parse(subscriptionInfo.external_reference);
+            }
+          } catch (e) {
+            // No es B2B, es una suscripción regular o estándar
+          }
+
+          if (datosB2B && datosB2B.tipo === 'b2b') {
+            // 🏢 CASO B2B: Generar Licencia Matriz con Múltiples Activaciones
+            const newLicenseKey = generateLicenseKey('B2B');
+            const nuevaLicenciaCorporativa = new License({
               licenseKey: newLicenseKey,
               status: 'active',
-              plan: 'Pro (Mercado Pago)',
+              plan: `Empresarial B2B - ${datosB2B.empresaNombre} (${datosB2B.cantidadLicencias} Cuentas)`,
               usageCount: 0,
               tokensUsados: 0,
               limiteTokens: 999999,
-              email: payerEmail || 'suscriptor_mercadopago@local',
+              maxActivations: Number(datosB2B.cantidadLicencias), // <--- Límite de puestos permitidos para la empresa
+              currentActivations: 0,
+              email: payerEmail || 'suscriptor_b2b@local',
               expiresAt
             });
-            console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
-            
-            // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO PARA NUEVOS SUSCRIPTORES
-            if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
-              await enviarCorreoBrevo(payerEmail, newLicenseKey);
+
+            await nuevaLicenciaCorporativa.save();
+            console.log(`✅ [WEBHOOK B2B] Licencia corporativa creada para ${datosB2B.empresaNombre} -> Key: ${newLicenseKey} (${datosB2B.cantidadLicencias} puestos)`);
+
+            // 📧 ENVÍO DE CORREO CORPORATIVO VÍA BREVO PARA B2B
+            if (payerEmail && payerEmail !== 'suscriptor_b2b@local') {
+              const htmlB2B = `
+                <div style="font-family: Arial, sans-serif; padding: 25px; color: #333; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">
+                  <h2 style="color: #1e40af;">¡Suscripción Empresarial B2B Activada, ${datosB2B.empresaNombre}! 🏢</h2>
+                  <p>Hola, su pago recurrente corporativo se ha procesado con éxito.</p>
+                  <p>Su clave de licencia corporativa exclusiva para <strong>${datosB2B.cantidadLicencias} puestos de trabajo</strong> es:</p>
+                  <div style="background-color: #eff6ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 22px; font-weight: bold; color: #1e3a8a; letter-spacing: 2px; margin: 20px 0;">
+                    ${newLicenseKey}
+                  </div>
+                  <p>Comparta esta misma clave con los miembros de su equipo para que la activen simultáneamente en sus extensiones de Chrome.</p>
+                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                  <p style="font-size: 12px; color: #6b7280;">Soporte técnico prioritario incluido durante su suscripción activa.</p>
+                </div>
+              `;
+              await enviarCorreoBrevo(payerEmail, newLicenseKey, `Tu Licencia Corporativa B2B - ${datosB2B.empresaNombre} 🚀`, htmlB2B);
+            }
+
+          } else {
+            // 👤 CASO INDIVIDUAL (Tu código original intacto)
+            let usuario = await License.findOne({ email: payerEmail });
+
+            if (usuario) {
+              usuario.status = 'active';
+              usuario.plan = 'Pro (Mercado Pago)';
+              usuario.expiresAt = expiresAt;
+              await usuario.save();
+              console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
+            } else {
+              const newLicenseKey = generateLicenseKey('PRES');
+              await License.create({
+                licenseKey: newLicenseKey,
+                status: 'active',
+                plan: 'Pro (Mercado Pago)',
+                usageCount: 0,
+                tokensUsados: 0,
+                limiteTokens: 999999,
+                email: payerEmail || 'suscriptor_mercadopago@local',
+                expiresAt
+              });
+              console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
+              
+              // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO PARA NUEVOS SUSCRIPTORES
+              if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
+                await enviarCorreoBrevo(payerEmail, newLicenseKey);
+              }
             }
           }
         } 
