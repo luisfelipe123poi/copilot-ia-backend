@@ -56,6 +56,18 @@ const leadEmpresaSchema = new mongoose.Schema({
   fecha: { type: Date, default: Date.now }
 });
 
+// ==========================================
+// DEFINICIÓN DE MODELOS DE MONGOOSE
+// ==========================================
+const Suscriptor = mongoose.models.Suscriptor || mongoose.model('Suscriptor', new mongoose.Schema({
+    fecha: { type: Date, default: Date.now },
+    nombre: String,
+    email: String,
+    plan: String,
+    monto: Number,
+    estado: String // 'Activo', 'Pausado', 'Cancelado'
+}));
+
 const LeadEmpresa = mongoose.models.LeadEmpresa || mongoose.model('LeadEmpresa', leadEmpresaSchema);
 
 // Instancia de OpenAI
