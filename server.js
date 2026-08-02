@@ -58,6 +58,7 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
+const axios = require('axios');
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -717,7 +718,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   }
 });
 
-const axios = require('axios');
+
 
 // Endpoint para recuperar el link de pago/actualización de una suscripción existente
 app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
