@@ -870,6 +870,36 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
+// ==========================================
+// ENDPOINT PARA LISTAR CUENTAS/LICENCIAS FREE
+// ==========================================
+app.post('/api/admin/listar-cuentas-free', async (req, res) => {
+    try {
+        const { adminSecret } = req.body;
+
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        // Buscar todas las licencias que estén en estado 'trial' o cuya plan sea 'Prueba Gratuita'
+        const cuentas = await License.find({
+            $or: [
+                { status: 'trial' },
+                { plan: 'Prueba Gratuita' }
+            ]
+        }).select('email status plan createdAt');
+
+        return res.json({
+            success: true,
+            cuentas: cuentas
+        });
+
+    } catch (error) {
+        console.error('Error al listar cuentas free:', error);
+        return res.status(500).json({ success: false, error: 'Error interno del servidor.' });
+    }
+});
+
 // Ruta para cancelar una suscripción (Preapproval) en Mercado Pago
 app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
     try {
