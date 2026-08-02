@@ -59,6 +59,8 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
 import axios from 'axios';
+const cron = require('node-cron');
+const axios = require('axios');
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -716,6 +718,112 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     console.error('Error en /api/generar-respuesta:', error.message);
     return res.status(500).json({ error: 'Ocurrió un error al generar la respuesta de IA.' });
   }
+});
+
+
+
+// ==========================================
+// 1. ENDPOINT PARA PROGRAMAR LA CANCELACIÓN
+// ==========================================
+app.post('/api/admin/programar-cancelacion', async (req, res) => {
+    try {
+        const { adminSecret, emailContacto, preapprovalId, fechaCancelacion } = req.body;
+
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        if (!fechaCancelacion || (!emailContacto && !preapprovalId)) {
+            return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (fecha y identificador).' });
+        }
+
+        // Buscar y actualizar en tu base de datos (Ejemplo usando Mongoose)
+        // Puedes buscar por email de la empresa o por el ID de preaprobación de Mercado Pago
+        const query = preapprovalId ? { preapprovalId } : { emailContacto };
+        
+        const subActualizada = await SuscripcionModel.findOneAndUpdate(
+            query,
+            { 
+                cancelAt: new Date(fechaCancelacion), // Fecha límite en la que se eliminará
+                estadoCancelacionProgramada: 'PENDIENTE'
+            },
+            { new: true }
+        );
+
+        if (!subActualizada) {
+            return res.status(404).json({ success: false, error: 'No se encontró una suscripción activa con esos datos.' });
+        }
+
+        return res.json({
+            success: true,
+            message: `Cancelación programada con éxito para el día ${fechaCancelacion}.`,
+            data: subActualizada
+        });
+
+    } catch (error) {
+        console.error('Error al programar cancelación:', error);
+        return res.status(500).json({ success: false, error: 'Error interno del servidor.' });
+    }
+});
+
+// ==========================================
+// 2. ENDPOINT PARA VER LA LISTA DE PLANES PENDIENTES DE CANCELAR
+// ==========================================
+app.post('/api/admin/listar-pendientes', async (req, res) => {
+    try {
+        const { adminSecret } = req.body;
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        // Buscar todas las suscripciones con cancelación programada pendiente
+        const pendientes = await SuscripcionModel.find({ estadoCancelacionProgramada: 'PENDIENTE' });
+
+        return res.json({ success: true, pending: pendientes });
+    } catch (error) {
+        return res.status(500).json({ success: false, error: 'Error al obtener lista.' });
+    }
+});
+
+// ==========================================
+// 3. CRON JOB: SE EJECUTA TODOS LOS DÍAS A MEDIANOCHE (00:00)
+// ==========================================
+cron.schedule('0 0 * * *', async () => {
+    console.log('[CRON] Verificando suscripciones programadas para cancelar hoy...');
+    try {
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+
+        // Buscar suscripciones cuya fecha de cancelación programada sea hoy o ya haya pasado y sigan pendientes
+        const porCancelar = await SuscripcionModel.find({
+            estadoCancelacionProgramada: 'PENDIENTE',
+            cancelAt: { $lte: hoy }
+        });
+
+        for (const sub of porCancelar) {
+            try {
+                // Cancelar en Mercado Pago automáticamente
+                await axios.put(
+                    `https://api.mercadopago.com/preapproval/${sub.preapprovalId}`,
+                    { status: 'cancelled' },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                sub.estadoCancelacionProgramada = 'EJECUTADA';
+                await sub.save();
+                console.log(`[CRON] Suscripción ${sub.preapprovalId} cancelada exitosamente por fecha límite.`);
+            } catch (mpError) {
+                console.error(`[CRON ERROR] No se pudo cancelar en MP la suscripción ${sub.preapprovalId}:`, mpError.response?.data || mpError.message);
+            }
+        }
+    } catch (err) {
+        console.error('[CRON ERROR] Error en la ejecución diaria de cancelaciones:', err);
+    }
 });
 
 // Ruta para cancelar una suscripción (Preapproval) en Mercado Pago
