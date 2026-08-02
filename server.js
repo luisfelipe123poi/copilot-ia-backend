@@ -1,7 +1,7 @@
 // ==========================================
 // AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo) 
 // ==========================================
-
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -12,7 +12,7 @@ import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 import TelegramBot from 'node-telegram-bot-api';
 
-dotenv.config();
+
 
 const app = express();
 
