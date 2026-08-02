@@ -948,6 +948,41 @@ app.post('/api/admin/listar-cuentas-free', async (req, res) => {
     }
 });
 
+// Endpoint para listar todas las licencias del sistema (Panel de Administrador)
+app.post('/api/admin/listar-todas-licencias', async (req, res) => {
+    try {
+        const { adminSecret } = req.body;
+
+        // Validar contraseña de administrador del backend
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: "No autorizado. Admin Secret incorrecto." });
+        }
+
+        // ⚠️ CAMBIA 'Licencia' por el nombre de tu modelo/tabla en la base de datos
+        // (ej: License, User, etc., dependiendo de cómo guardes las licencias)
+        const licencias = await Licencia.find({}).lean();
+
+        // Opcional: Mapear los campos para asegurar que el frontend los reciba con los nombres correctos
+        const licenciasFormateadas = licencias.map(lic => ({
+            email: lic.email || lic.correo || "N/A",
+            licenseKey: lic.licenseKey || lic.key || "N/A",
+            status: lic.status || lic.estado || "N/A",
+            plan: lic.plan || lic.tipo || "N/A",
+            fechaFin: lic.fechaFin || lic.fechaVencimiento || "N/A",
+            fechaInicio: lic.fechaInicio || "N/A"
+        }));
+
+        return res.status(200).json({
+            success: true,
+            licencias: licenciasFormateadas
+        });
+
+    } catch (error) {
+        console.error("Error al listar todas las licencias:", error);
+        return res.status(500).json({ success: false, error: "Error interno del servidor." });
+    }
+});
+
 // Ruta para cancelar una suscripción (Preapproval) en Mercado Pago
 app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
     try {
