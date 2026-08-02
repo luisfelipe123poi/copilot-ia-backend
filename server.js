@@ -935,7 +935,7 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ==========================================
-// ENDPOINT: Cotización Empresarial B2B
+// ENDPOINT: Cotización Empresarial B2B (Sin Correos, Guardado en Base de Datos)
 // ==========================================
 app.post('/api/cotizacion-empresarial', async (req, res) => {
     try {
@@ -946,7 +946,7 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
             return res.status(400).json({ success: false, error: "Faltan campos obligatorios." });
         }
 
-        // 1. Guardar el lead en la base de datos de MongoDB
+        // Guardar directamente en la base de datos de MongoDB
         await LeadEmpresa.create({
             empresa, 
             contacto, 
@@ -955,41 +955,15 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
             licencias, 
             pais, 
             mensaje, 
-            fecha: new Date()
+            fecha: new Date(),
+            estado: 'PENDIENTE'
         });
 
-        // 2. Enviar correo electrónico usando Nodemailer configurado con variables de entorno
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com', // Forzado explícitamente para que no busque en localhost
-            port: 465,
-            secure: true, 
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
-        });
-
-        await transporter.sendMail({
-            from: `"Portal Web" <${process.env.SMTP_USER}>`,
-            to: process.env.EMAIL_DESTINO || process.env.SMTP_USER,
-            subject: `Nueva Cotización B2B: ${empresa}`,
-            html: `
-                <h2>Nueva solicitud de contrato empresarial</h2>
-                <p><strong>Empresa:</strong> ${empresa}</p>
-                <p><strong>Contacto:</strong> ${contacto}</p>
-                <p><strong>Email:</strong> ${email}</p>
-                <p><strong>Teléfono:</strong> ${telefono}</p>
-                <p><strong>Puestos solicitados:</strong> ${licencias}</p>
-                <p><strong>País:</strong> ${pais || 'No especificado'}</p>
-                <p><strong>Mensaje:</strong> ${mensaje || 'Ninguno'}</p>
-            `
-        });
-
-        console.log(`Nueva cotización guardada y correo enviado para la empresa: ${empresa} (${email})`);
+        console.log(`Nueva cotización B2B guardada en la plataforma para: ${empresa} (${email})`);
 
         return res.status(200).json({
             success: true,
-            message: "Cotización recibida correctamente."
+            message: "Solicitud registrada en nuestra plataforma correctamente."
         });
 
     } catch (error) {
@@ -998,6 +972,18 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
     }
 });
 
+// ==========================================
+// ENDPOINT: Obtener las Solicitudes para el Panel Admin
+// ==========================================
+app.get('/api/admin/cotizaciones', async (req, res) => {
+    try {
+        const leads = await LeadEmpresa.find().sort({ fecha: -1 }); // Ordena de más reciente a más antiguo
+        return res.status(200).json({ success: true, leads });
+    } catch (error) {
+        console.error("Error al obtener las cotizaciones:", error);
+        return res.status(500).json({ success: false, error: "Error al cargar los datos." });
+    }
+});
 // ==========================================
 // ENDPOINT PARA LISTAR CUENTAS/LICENCIAS FREE
 // ==========================================
