@@ -1045,7 +1045,33 @@ app.get('/api/admin/metricas', async (req, res) => {
 
 app.get('/api/admin/suscriptores', async (req, res) => {
     try {
-        const suscriptores = await Suscriptor.find().sort({ fecha: -1 });
+        const db = mongoose.connection.db;
+        
+        // 1. Obtiene todas las colecciones que existen en la base de datos actual
+        const collections = await db.listCollections().toArray();
+        let suscriptores = [];
+
+        // 2. Busca de forma inteligente en qué colección hay documentos guardados
+        for (let colInfo of collections) {
+            const colName = colInfo.name;
+            // Ignoramos colecciones internas del sistema si las hubiera
+            if (colName.startsWith('system.')) continue;
+
+            const docs = await db.collection(colName).find({}).toArray();
+            
+            // Si encontramos una colección que tenga documentos, los adaptamos al formato del CRM
+            if (docs && docs.length > 0) {
+                suscriptores = docs.map(item => ({
+                    fecha: item.createdAt || item.fecha || item.date || new Date(),
+                    nombre: item.nombre || item.user || item.client || item.username || 'Cliente General',
+                    email: item.email || item.correo || item.mail || 'Sin Correo',
+                    plan: item.plan || item.tipo || item.licenseType || 'Plan Estándar',
+                    monto: Number(item.monto !== undefined ? item.monto : (item.price || item.amount || 0)),
+                    estado: item.estado || item.status || 'Activo'
+                }));
+                break; // Usamos la primera colección con datos que encuentre
+            }
+        }
 
         const mrr = suscriptores.filter(s => s.estado === 'Activo').reduce((acc, curr) => acc + (curr.monto || 0), 0);
         const dejadoDeGanar = suscriptores
@@ -1065,7 +1091,6 @@ app.get('/api/admin/suscriptores', async (req, res) => {
         });
 
     } catch (error) {
-        // <--- CAMBIO CLAVE AQUÍ: Devuelve el error real en el JSON para verlo en consola
         console.error("Error detallado:", error.message);
         res.status(500).json({ success: false, message: error.message });
     }
