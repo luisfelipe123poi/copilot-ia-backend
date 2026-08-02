@@ -58,7 +58,7 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
-import axios from 'axios';
+
 const cron = require('node-cron');
 const axios = require('axios');
 
