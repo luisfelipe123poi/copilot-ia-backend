@@ -972,6 +972,90 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
     }
 });
 
+// Agrega este endpoint en tu archivo principal del servidor Express (ej. server.js o index.js)
+
+app.get('/api/admin/metricas', async (req, res) => {
+    try {
+        // Supongamos que obtienes los suscriptores desde tu base de datos (MongoDB/PostgreSQL)
+        const suscriptores = await Suscriptor.find(); // O tu método de consulta
+
+        let ventasHistoricasTotales = 0;
+        let mrrActual = 0;
+        let activosCount = 0;
+        let pausadosCount = 0;
+        let canceladosCount = 0;
+        let dejadoDeGanarMRR = 0;
+
+        suscriptores.forEach(sub => {
+            const monto = sub.monto || 0;
+            
+            if (sub.estado === 'Activo') {
+                mrrActual += monto;
+                activosCount++;
+                ventasHistoricasTotales += monto * 4; // Estimado histórico acumulado
+            } else if (sub.estado === 'Pausado') {
+                pausadosCount++;
+                dejadoDeGanarMRR += monto; // Dinero dejado de percibir por pausa
+            } else if (sub.estado === 'Cancelado') {
+                canceladosCount++;
+                dejadoDeGanarMRR += monto; // Dinero dejado de percibir por cancelación definitiva
+            }
+        });
+
+        // Proyección mes siguiente: MRR actual más un factor de crecimiento estimado (ej. 10% conservador)
+        const proyeccionMesSiguiente = mrrActual * 1.10;
+
+        const tasaChurn = suscriptores.length > 0 
+            ? ((canceladosCount / suscriptores.length) * 100).toFixed(1) 
+            : 0;
+
+        res.json({
+            success: true,
+            metrics: {
+                ventasHistoricasTotales,
+                mrrActual,
+                activosCount,
+                pausadosCount,
+                canceladosCount,
+                dejadoDeGanarMRR, // <--- Lo que se ha dejado de ganar por planes pausados/cancelados
+                proyeccionMesSiguiente, // <--- Proyección estimada para el mes siguiente
+                tasaChurn: `${tasaChurn}%`
+            }
+        });
+
+    } catch (error) {
+        console.error("Error al calcular métricas:", error);
+        res.status(500).json({ success: false, message: "Error interno del servidor al procesar métricas." });
+    }
+});
+
+app.get('/api/admin/suscriptores', async (req, res) => {
+    try {
+        const suscriptores = await Suscriptor.find().sort({ fecha: -1 });
+
+        // Opcional: Calcular métricas al vuelo para enviarlas junto con la lista
+        const mrr = suscriptores.filter(s => s.estado === 'Activo').reduce((acc, curr) => acc + (curr.monto || 0), 0);
+        const dejadoDeGanar = suscriptores
+            .filter(s => s.estado === 'Pausado' || s.estado === 'Cancelado')
+            .reduce((acc, curr) => acc + (curr.monto || 0), 0);
+        
+        const proyeccionSiguiente = mrr * 1.10;
+
+        res.json({
+            success: true,
+            resumenFinanciero: {
+                mrr,
+                dejadoDeGanar,
+                proyeccionSiguiente
+            },
+            suscriptores
+        });
+
+    } catch (error) {
+        res.status(500).json({ success: false, message: "No se pudo obtener la base de datos." });
+    }
+});
+
 // ==========================================
 // ENDPOINT: Obtener las Solicitudes para el Panel Admin
 // ==========================================
