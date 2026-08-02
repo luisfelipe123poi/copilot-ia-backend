@@ -956,7 +956,7 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
 
         await transporter.sendMail({
             from: '"Portal Web" <no-reply@tudominio.com>',
-            to: 'ventas@tudominio.com', // Tu correo corporativo donde quieres recibir las cotizaciones
+            to: 'copilot.ia.pro@gmail.com', // Tu correo corporativo donde quieres recibir las cotizaciones
             subject: `Nueva Cotización B2B: ${empresa}`,
             html: `
                 <h2>Nueva solicitud de contrato empresarial</h2>
