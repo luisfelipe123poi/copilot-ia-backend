@@ -37,7 +37,10 @@ const licenseSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true },
   limiteTokens: { type: Number, default: 7 },
   tokensUsados: { type: Number, default: 0 },
-  plan: { type: String, default: 'Prueba Gratuita' }
+  plan: { type: String, default: 'Prueba Gratuita' },
+  preapprovalId: { type: String }, // Identificador de la suscripción recurrente en Mercado Pago
+  cancelAt: { type: Date },       // Fecha límite programada para cancelar
+  estadoCancelacionProgramada: { type: String, enum: ['PENDIENTE', 'EJECUTADA'], default: null } // Estado del cron de cancelación
 });
 const License = mongoose.model('License', licenseSchema);
 
@@ -58,7 +61,6 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
-import axios from 'axios';
 const cron = require('node-cron');
 const axios = require('axios');
 
@@ -729,7 +731,7 @@ app.post('/api/admin/programar-cancelacion', async (req, res) => {
     try {
         const { adminSecret, emailContacto, preapprovalId, fechaCancelacion } = req.body;
 
-        if (adminSecret !== process.env.ADMIN_SECRET) {
+        if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
@@ -737,14 +739,13 @@ app.post('/api/admin/programar-cancelacion', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (fecha y identificador).' });
         }
 
-        // Buscar y actualizar en tu base de datos (Ejemplo usando Mongoose)
-        // Puedes buscar por email de la empresa o por el ID de preaprobación de Mercado Pago
-        const query = preapprovalId ? { preapprovalId } : { emailContacto };
+        // Buscar por preapprovalId o por correo electrónico en el esquema License
+        const query = preapprovalId ? { preapprovalId } : { email: emailContacto };
         
-        const subActualizada = await SuscripcionModel.findOneAndUpdate(
+        const subActualizada = await License.findOneAndUpdate(
             query,
             { 
-                cancelAt: new Date(fechaCancelacion), // Fecha límite en la que se eliminará
+                cancelAt: new Date(fechaCancelacion), 
                 estadoCancelacionProgramada: 'PENDIENTE'
             },
             { new: true }
@@ -772,12 +773,12 @@ app.post('/api/admin/programar-cancelacion', async (req, res) => {
 app.post('/api/admin/listar-pendientes', async (req, res) => {
     try {
         const { adminSecret } = req.body;
-        if (adminSecret !== process.env.ADMIN_SECRET) {
+        if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
-        // Buscar todas las suscripciones con cancelación programada pendiente
-        const pendientes = await SuscripcionModel.find({ estadoCancelacionProgramada: 'PENDIENTE' });
+        // Buscar todas las licencias con cancelación programada pendiente
+        const pendientes = await License.find({ estadoCancelacionProgramada: 'PENDIENTE' });
 
         return res.json({ success: true, pending: pendientes });
     } catch (error) {
@@ -794,29 +795,32 @@ cron.schedule('0 0 * * *', async () => {
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
 
-        // Buscar suscripciones cuya fecha de cancelación programada sea hoy o ya haya pasado y sigan pendientes
-        const porCancelar = await SuscripcionModel.find({
+        // Buscar licencias cuya fecha límite sea hoy o anterior y sigan pendientes
+        const porCancelar = await License.find({
             estadoCancelacionProgramada: 'PENDIENTE',
             cancelAt: { $lte: hoy }
         });
 
         for (const sub of porCancelar) {
             try {
-                // Cancelar en Mercado Pago automáticamente
-                await axios.put(
-                    `https://api.mercadopago.com/preapproval/${sub.preapprovalId}`,
-                    { status: 'cancelled' },
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
-                            'Content-Type': 'application/json'
+                if (sub.preapprovalId) {
+                    // Cancelar en la API de Mercado Pago automáticamente usando axios
+                    await axios.put(
+                        `https://api.mercadopago.com/preapproval/${sub.preapprovalId}`,
+                        { status: 'cancelled' },
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
                         }
-                    }
-                );
+                    );
+                }
 
                 sub.estadoCancelacionProgramada = 'EJECUTADA';
+                sub.status = 'expired';
                 await sub.save();
-                console.log(`[CRON] Suscripción ${sub.preapprovalId} cancelada exitosamente por fecha límite.`);
+                console.log(`[CRON] Suscripción/Licencia ${sub.email || sub.preapprovalId} cancelada exitosamente por fecha límite.`);
             } catch (mpError) {
                 console.error(`[CRON ERROR] No se pudo cancelar en MP la suscripción ${sub.preapprovalId}:`, mpError.response?.data || mpError.message);
             }
