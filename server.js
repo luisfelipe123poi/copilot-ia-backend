@@ -718,7 +718,46 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   }
 });
 
+// Ruta para cancelar una suscripción (Preapproval) en Mercado Pago
+app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
+    try {
+        const { adminSecret, preapprovalId } = req.body;
 
+        // 1. Validar el secreto de administrador
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        if (!preapprovalId) {
+            return res.status(400).json({ success: false, error: 'Falta el preapprovalId de la suscripción.' });
+        }
+
+        // 2. Realizar petición PUT a la API de Mercado Pago para cancelar
+        const response = await axios.put(
+            `https://api.mercadopago.com/preapproval/${preapprovalId}`,
+            { status: 'cancelled' },
+            {
+                headers: {
+                    'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`, // Tu token de acceso de Mercado Pago
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        return res.json({
+            success: true,
+            message: 'Suscripción cancelada correctamente en Mercado Pago.',
+            data: response.data
+        });
+
+    } catch (error) {
+        console.error('Error al cancelar la suscripción en Mercado Pago:', error.response?.data || error.message);
+        return res.status(500).json({
+            success: false,
+            error: error.response?.data?.message || 'Error al comunicarse con la API de Mercado Pago.'
+        });
+    }
+});
 
 // Endpoint para recuperar el link de pago/actualización de una suscripción existente
 app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
