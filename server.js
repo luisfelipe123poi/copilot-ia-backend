@@ -63,6 +63,7 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 const USAGE_LIMIT_FREE_TRIAL = 1;
 import cron from 'node-cron';
 import axios from 'axios';
+require('dotenv').config();
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -929,10 +930,6 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
         }
 
         // 1. Guardar el lead en tu base de datos (Ejemplo con Mongoose / MongoDB)
-        /* 
-           Asegúrate de tener un modelo creado llamado LeadEmpresa 
-           o cambia esto por la lógica de tu base de datos.
-        */
         await LeadEmpresa.create({
             empresa, 
             contacto, 
@@ -944,10 +941,11 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
             fecha: new Date()
         });
 
-        // 2. Enviar correo electrónico a tu equipo interno usando Nodemailer
+        // 2. Enviar correo electrónico usando las variables de entorno
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
             port: process.env.SMTP_PORT,
+            secure: true, // true para puerto 465
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS
@@ -955,8 +953,8 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
         });
 
         await transporter.sendMail({
-            from: '"Portal Web" <no-reply@tudominio.com>',
-            to: 'copilot.ia.pro@gmail.com', // Tu correo corporativo donde quieres recibir las cotizaciones
+            from: `"Portal Web" <${process.env.SMTP_USER}>`,
+            to: process.env.EMAIL_DESTINO, // Aquí usará automáticamente copilot.ia.pro@gmail.com
             subject: `Nueva Cotización B2B: ${empresa}`,
             html: `
                 <h2>Nueva solicitud de contrato empresarial</h2>
