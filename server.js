@@ -61,8 +61,8 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
-const cron = require('node-cron');
-const axios = require('axios');
+import cron from 'node-cron';
+import axios from 'axios';
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
