@@ -80,6 +80,18 @@ import axios from 'axios';
 import 'dotenv/config';
 import nodemailer from 'nodemailer';
 
+const mongoose = require('mongoose');
+
+// Define el modelo si no lo tienes importado de otro archivo
+const Suscriptor = mongoose.models.Suscriptor || mongoose.model('Suscriptor', new mongoose.Schema({
+    fecha: Date,
+    nombre: String,
+    email: String,
+    plan: String,
+    monto: Number,
+    estado: String
+}));
+
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
   const bytes = crypto.randomBytes(6).toString('hex').toUpperCase();
