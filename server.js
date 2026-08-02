@@ -723,31 +723,43 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT PARA ELIMINAR CUENTAS/LICENCIAS FREE
+// ENDPOINT PARA ELIMINAR CUENTA/LICENCIA FREE POR CORREO
 // ==========================================
-app.post('/api/admin/eliminar-cuentas-free', async (req, res) => {
+app.post('/api/admin/eliminar-cuenta-free', async (req, res) => {
     try {
-        const { adminSecret } = req.body;
+        const { adminSecret, email } = req.body;
 
         if (adminSecret !== process.env.ADMIN_SECRET) {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
-        // Eliminar todas las licencias que estén en estado 'trial' o cuya plan sea 'Prueba Gratuita'
-        const resultado = await License.deleteMany({
+        if (!email) {
+            return res.status(400).json({ success: false, error: 'El correo electrónico es obligatorio.' });
+        }
+
+        // Buscar y eliminar la licencia que coincida con el correo y esté en estado 'trial' o plan 'Prueba Gratuita'
+        const resultado = await License.deleteOne({
+            email: email.trim().toLowerCase(),
             $or: [
                 { status: 'trial' },
                 { plan: 'Prueba Gratuita' }
             ]
         });
 
+        if (resultado.deletedCount === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'No se encontró ninguna cuenta free asociada a ese correo.' 
+            });
+        }
+
         return res.json({
             success: true,
-            message: `Se han eliminado ${resultado.deletedCount} cuentas/licencias free correctamente.`
+            message: `La cuenta free asociada a ${email} ha sido eliminada correctamente.`
         });
 
     } catch (error) {
-        console.error('Error al eliminar cuentas free:', error);
+        console.error('Error al eliminar cuenta free por correo:', error);
         return res.status(500).json({ success: false, error: 'Error interno del servidor.' });
     }
 });
