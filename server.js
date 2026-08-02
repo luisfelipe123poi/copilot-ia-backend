@@ -918,6 +918,71 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
+// Endpoint para procesar solicitudes de cotización empresarial B2B
+app.post('/api/cotizacion-empresarial', async (req, res) => {
+    try {
+        const { empresa, contacto, email, telefono, licencias, pais, mensaje } = req.body;
+
+        // Validación básica
+        if (!empresa || !contacto || !email || !telefono) {
+            return res.status(400).json({ success: false, error: "Faltan campos obligatorios." });
+        }
+
+        // 1. Guardar el lead en tu base de datos (Ejemplo con Mongoose / MongoDB)
+        /* 
+           Asegúrate de tener un modelo creado llamado LeadEmpresa 
+           o cambia esto por la lógica de tu base de datos.
+        */
+        await LeadEmpresa.create({
+            empresa, 
+            contacto, 
+            email, 
+            telefono, 
+            licencias, 
+            pais, 
+            mensaje, 
+            fecha: new Date()
+        });
+
+        // 2. Enviar correo electrónico a tu equipo interno usando Nodemailer
+        const transporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port: process.env.SMTP_PORT,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS
+            }
+        });
+
+        await transporter.sendMail({
+            from: '"Portal Web" <no-reply@tudominio.com>',
+            to: 'ventas@tudominio.com', // Tu correo corporativo donde quieres recibir las cotizaciones
+            subject: `Nueva Cotización B2B: ${empresa}`,
+            html: `
+                <h2>Nueva solicitud de contrato empresarial</h2>
+                <p><strong>Empresa:</strong> ${empresa}</p>
+                <p><strong>Contacto:</strong> ${contacto}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Teléfono:</strong> ${telefono}</p>
+                <p><strong>Puestos solicitados:</strong> ${licencias}</p>
+                <p><strong>País:</strong> ${pais || 'No especificado'}</p>
+                <p><strong>Mensaje:</strong> ${mensaje || 'Ninguno'}</p>
+            `
+        });
+
+        console.log(`Nueva cotización guardada y correo enviado para la empresa: ${empresa} (${email})`);
+
+        return res.status(200).json({
+            success: true,
+            message: "Cotización recibida correctamente."
+        });
+
+    } catch (error) {
+        console.error("Error al procesar cotización empresarial:", error);
+        return res.status(500).json({ success: false, error: "Error interno al procesar la solicitud." });
+    }
+});
+
 // ==========================================
 // ENDPOINT PARA LISTAR CUENTAS/LICENCIAS FREE
 // ==========================================
