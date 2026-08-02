@@ -717,6 +717,56 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   }
 });
 
+const axios = require('axios');
+
+// Endpoint para recuperar el link de pago/actualización de una suscripción existente
+app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
+  try {
+    const { adminSecret, emailContacto } = req.body;
+
+    if (adminSecret !== process.env.ADMIN_SECRET) {
+      return httpRes.status(401).json({ success: false, error: "No autorizado" });
+    }
+
+    // 1. Consultar a la API de Mercado Pago las pre-aprobaciones (suscripciones) filtrando por correo
+    const mpResponse = await axios.get(`https://api.mercadopago.com/preapproval/search`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`
+      },
+      params: {
+        payer_email: emailContacto,
+        status: 'authorized' // O 'pending' si el pago falló y está pendiente de reintento
+      }
+    });
+
+    const suscripciones = mpResponse.data.results;
+
+    if (!suscripciones || suscripciones.length === 0) {
+      return httpRes.status(404).json({ 
+        success: false, 
+        error: "No se encontró ninguna suscripción activa o pendiente para este correo." 
+      });
+    }
+
+    // Tomamos la suscripción más reciente de ese cliente
+    const suscripcionActiva = suscripciones[0];
+    
+    // Mercado Pago devuelve la URL de init_point (o el link de pago de la suscripción)
+    const linkPagoExistente = suscripcionActiva.init_point;
+
+    return httpRes.json({
+      success: true,
+      init_point: linkPagoExistente,
+      status: suscripcionActiva.status,
+      idSuscripcion: suscripcionActiva.id
+    });
+
+  } catch (error) {
+    console.error("Error al buscar suscripción en MP:", error.response?.data || error.message);
+    return httpRes.status(500).json({ success: false, error: "Error al consultar la API de Mercado Pago" });
+  }
+});
+
 // ==========================================
 // ENDPOINT NUEVO: Crear Licencias de Feedback (Admin)
 // ==========================================
