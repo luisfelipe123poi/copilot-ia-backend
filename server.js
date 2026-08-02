@@ -723,6 +723,54 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 });
 
 // ==========================================
+// ENDPOINT PARA OBTENER TODA LA INFORMACIÓN DE UNA LICENCIA/USUARIO
+// ==========================================
+app.post('/api/admin/detalles-licencia', async (req, res) => {
+    try {
+        const { adminSecret, email, licenseKey } = req.body;
+
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        if (!email && !licenseKey) {
+            return res.status(400).json({ success: false, error: 'Debes proporcionar un correo o una clave de licencia.' });
+        }
+
+        const query = email ? { email: email.trim().toLowerCase() } : { licenseKey: licenseKey.trim() };
+        const licencia = await License.findOne(query);
+
+        if (!licencia) {
+            return res.status(404).json({ success: false, error: 'No se encontró ninguna licencia con los datos proporcionados.' });
+        }
+
+        return res.json({
+            success: true,
+            detalles: {
+                email: licencia.email || 'N/A',
+                licenseKey: licencia.licenseKey || 'N/A',
+                status: licencia.status || 'N/A',
+                plan: licencia.plan || 'N/A',
+                fechaInicio: licencia.createdAt || 'N/A',
+                fechaFin: licencia.expiresAt || 'N/A',
+                activacionesActuales: licencia.activationsCount || 0,
+                maxActivations: licencia.maxActivations || 0,
+                cobrosRealizados: licencia.paymentCount || licencia.cobrosLlevados || 0,
+                estaActivo: licencia.isActive ?? true,
+                enPausa: licencia.isPaused || false,
+                cancelado: licencia.isCancelled || licencia.status === 'cancelled' || false,
+                preapprovalId: licencia.preapprovalId || 'N/A',
+                rawdata: licencia
+            }
+        });
+
+    } catch (error) {
+        console.error('Error al obtener detalles de la licencia:', error);
+        return res.status(500).json({ success: false, error: 'Error interno del servidor.' });
+    }
+});
+
+// ==========================================
 // ENDPOINT PARA ELIMINAR CUENTA/LICENCIA FREE POR CORREO
 // ==========================================
 app.post('/api/admin/eliminar-cuenta-free', async (req, res) => {
