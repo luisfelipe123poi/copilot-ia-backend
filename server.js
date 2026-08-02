@@ -722,7 +722,35 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   }
 });
 
+// ==========================================
+// ENDPOINT PARA ELIMINAR CUENTAS/LICENCIAS FREE
+// ==========================================
+app.post('/api/admin/eliminar-cuentas-free', async (req, res) => {
+    try {
+        const { adminSecret } = req.body;
 
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: 'No autorizado.' });
+        }
+
+        // Eliminar todas las licencias que estén en estado 'trial' o cuya plan sea 'Prueba Gratuita'
+        const resultado = await License.deleteMany({
+            $or: [
+                { status: 'trial' },
+                { plan: 'Prueba Gratuita' }
+            ]
+        });
+
+        return res.json({
+            success: true,
+            message: `Se han eliminado ${resultado.deletedCount} cuentas/licencias free correctamente.`
+        });
+
+    } catch (error) {
+        console.error('Error al eliminar cuentas free:', error);
+        return res.status(500).json({ success: false, error: 'Error interno del servidor.' });
+    }
+});
 
 // ==========================================
 // 1. ENDPOINT PARA PROGRAMAR LA CANCELACIÓN
