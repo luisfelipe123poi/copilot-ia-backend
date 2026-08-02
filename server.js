@@ -78,6 +78,7 @@ const USAGE_LIMIT_FREE_TRIAL = 1;
 import cron from 'node-cron';
 import axios from 'axios';
 import 'dotenv/config';
+import nodemailer from 'nodemailer';
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -933,7 +934,9 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
-// Endpoint para procesar solicitudes de cotización empresarial B2B
+// ==========================================
+// ENDPOINT: Cotización Empresarial B2B
+// ==========================================
 app.post('/api/cotizacion-empresarial', async (req, res) => {
     try {
         const { empresa, contacto, email, telefono, licencias, pais, mensaje } = req.body;
@@ -943,7 +946,7 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
             return res.status(400).json({ success: false, error: "Faltan campos obligatorios." });
         }
 
-        // 1. Guardar el lead en tu base de datos (Ejemplo con Mongoose / MongoDB)
+        // 1. Guardar el lead en la base de datos de MongoDB
         await LeadEmpresa.create({
             empresa, 
             contacto, 
@@ -955,11 +958,11 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
             fecha: new Date()
         });
 
-        // 2. Enviar correo electrónico usando las variables de entorno
+        // 2. Enviar correo electrónico usando Nodemailer configurado con variables de entorno
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
-            secure: true, // true para puerto 465
+            port: Number(process.env.SMTP_PORT) || 465,
+            secure: true, 
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS
@@ -968,7 +971,7 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
 
         await transporter.sendMail({
             from: `"Portal Web" <${process.env.SMTP_USER}>`,
-            to: process.env.EMAIL_DESTINO, // Aquí usará automáticamente copilot.ia.pro@gmail.com
+            to: process.env.EMAIL_DESTINO || process.env.SMTP_USER,
             subject: `Nueva Cotización B2B: ${empresa}`,
             html: `
                 <h2>Nueva solicitud de contrato empresarial</h2>
