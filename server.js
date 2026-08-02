@@ -1033,7 +1033,6 @@ app.get('/api/admin/suscriptores', async (req, res) => {
     try {
         const suscriptores = await Suscriptor.find().sort({ fecha: -1 });
 
-        // Opcional: Calcular métricas al vuelo para enviarlas junto con la lista
         const mrr = suscriptores.filter(s => s.estado === 'Activo').reduce((acc, curr) => acc + (curr.monto || 0), 0);
         const dejadoDeGanar = suscriptores
             .filter(s => s.estado === 'Pausado' || s.estado === 'Cancelado')
@@ -1052,7 +1051,9 @@ app.get('/api/admin/suscriptores', async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ success: false, message: "No se pudo obtener la base de datos." });
+        // <--- CAMBIO CLAVE AQUÍ: Devuelve el error real en el JSON para verlo en consola
+        console.error("Error detallado:", error.message);
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
