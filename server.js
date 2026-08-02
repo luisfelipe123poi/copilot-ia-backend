@@ -44,6 +44,20 @@ const licenseSchema = new mongoose.Schema({
 });
 const License = mongoose.model('License', licenseSchema);
 
+// Esquema para las cotizaciones B2B
+const leadEmpresaSchema = new mongoose.Schema({
+  empresa: { type: String, required: true },
+  contacto: { type: String, required: true },
+  email: { type: String, required: true },
+  telefono: { type: String, required: true },
+  licencias: { type: String },
+  pais: { type: String },
+  mensaje: { type: String },
+  fecha: { type: Date, default: Date.now }
+});
+
+const LeadEmpresa = mongoose.models.LeadEmpresa || mongoose.model('LeadEmpresa', leadEmpresaSchema);
+
 // Instancia de OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
