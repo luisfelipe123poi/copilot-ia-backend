@@ -960,8 +960,8 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
 
         // 2. Enviar correo electrónico usando Nodemailer configurado con variables de entorno
         const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: Number(process.env.SMTP_PORT) || 465,
+            host: 'smtp.gmail.com', // Forzado explícitamente para que no busque en localhost
+            port: 465,
             secure: true, 
             auth: {
                 user: process.env.SMTP_USER,
