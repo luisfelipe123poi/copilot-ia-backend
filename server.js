@@ -23,6 +23,38 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
+
+// Instancia de OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Instancia de Mercado Pago (Producción / Suscripciones PreApproval)
+const mpClient = new MercadoPagoConfig({ 
+  accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
+});
+
+// Contexto base por defecto si el usuario no configura nada
+const CONTEXTO_NEGOCIO_DEFAULT = `
+Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
+Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
+`;
+
+const USAGE_LIMIT_FREE_TRIAL = 1;
+import cron from 'node-cron';
+import axios from 'axios';
+import 'dotenv/config';
+import nodemailer from 'nodemailer';
+
+// ==========================================
+// CONFIGURACIÓN DE TELEGRAM
+// ==========================================
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'TU_TOKEN_DE_TELEGRAM_AQUI';
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || 'TU_CHAT_ID_AQUI';
+
+// Inicializar Bot de Telegram (Polling)
+const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+
 // 1. Conexión a MongoDB (Permanente para Producción)
 mongoose.connect(MONGODB_URI)
   .then(() => {
@@ -73,36 +105,6 @@ const Suscriptor = mongoose.models.Suscriptor || mongoose.model('Suscriptor', ne
 
 const LeadEmpresa = mongoose.models.LeadEmpresa || mongoose.model('LeadEmpresa', leadEmpresaSchema);
 
-// Instancia de OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Instancia de Mercado Pago (Producción / Suscripciones PreApproval)
-const mpClient = new MercadoPagoConfig({ 
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
-});
-
-// Contexto base por defecto si el usuario no configura nada
-const CONTEXTO_NEGOCIO_DEFAULT = `
-Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
-Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
-`;
-
-const USAGE_LIMIT_FREE_TRIAL = 1;
-import cron from 'node-cron';
-import axios from 'axios';
-import 'dotenv/config';
-import nodemailer from 'nodemailer';
-
-// ==========================================
-// CONFIGURACIÓN DE TELEGRAM
-// ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'TU_TOKEN_DE_TELEGRAM_AQUI';
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || 'TU_CHAT_ID_AQUI';
-
-// Inicializar Bot de Telegram (Polling)
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
