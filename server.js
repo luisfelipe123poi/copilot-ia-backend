@@ -13,6 +13,32 @@ import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 
 dotenv.config();
 
+const TelegramBot = require('node-telegram-bot-api');
+const express = require('express');
+
+// 1. Tomamos las credenciales de las variables de entorno de Render
+const TOKEN = process.env.TELEGRAM_TOKEN;
+const PORT = process.env.PORT || 3000;
+// Render te da automáticamente la URL externa de tu app mediante esta variable
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL; 
+
+if (!TOKEN) {
+  console.error("Falta la variable de entorno TELEGRAM_TOKEN");
+  process.exit(1);
+}
+
+if (!RENDER_URL) {
+  console.error("Falta la variable de entorno RENDER_EXTERNAL_URL o no se detectó el entorno de Render");
+  process.exit(1);
+}
+
+// 2. Inicializamos el bot SIN polling (¡Clave para evitar el error 409!)
+const bot = new TelegramBot(TOKEN);
+
+// 3. Configuramos Express para recibir las alertas de Telegram
+const app = express();
+app.use(express.json());
+
 const app = express();
 
 // Configuración de Multer para recibir archivos temporales de audio en memoria
@@ -164,6 +190,45 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
     console.error('❌ Error al enviar correo con Brevo:', error.message);
   }
 }
+
+// Ruta webhook que Telegram llamará cada vez que alguien le hable al bot
+app.post(`/bot${TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// Ruta de comprobación de salud (Health Check) para que Render sepa que el servicio está vivo
+app.get('/', (req, res) => {
+  res.send('¡El bot de Telegram está activo y funcionando en Render!');
+});
+
+// 4. Iniciamos el servidor y registramos el Webhook en Telegram automáticamente
+app.listen(PORT, async () => {
+  console.log(`Servidor corriendo en el puerto ${PORT}`);
+  
+  try {
+    const webhookUrl = `${RENDER_URL}/bot${TOKEN}`;
+    await bot.setWebHook(webhookUrl);
+    console.log(`Webhook configurado exitosamente en: ${webhookUrl}`);
+  } catch (error) {
+    console.error("Error al configurar el webhook:", error);
+  }
+});
+
+// ==========================================
+// TUS COMANDOS O LÓGICA DEL BOT AQUÍ ABAJO:
+// ==========================================
+bot.on('message', (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+
+  // Ejemplo de respuesta simple
+  if (text === '/start') {
+    bot.sendMessage(chatId, '¡Hola! Mi bot ya está funcionando perfectamente en Render sin errores de conflicto.');
+  } else {
+    bot.sendMessage(chatId, `Recibí tu mensaje: "${text}"`);
+  }
+});
 
 // ==========================================
 // ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
