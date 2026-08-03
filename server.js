@@ -5,6 +5,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+dotenv.config();
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import multer from 'multer';
@@ -12,7 +14,7 @@ import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 import TelegramBot from 'node-telegram-bot-api';
 
-dotenv.config();
+
 
 const app = express();
 
