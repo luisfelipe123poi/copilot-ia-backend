@@ -2,6 +2,7 @@
 // AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo) 
 // ==========================================
 
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -10,50 +11,20 @@ import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
-import TelegramBot from 'node-telegram-bot-api';
 import cron from 'node-cron';
 import axios from 'axios';
 import nodemailer from 'nodemailer';
 
 dotenv.config();
 
-// 1. Tomamos las credenciales de las variables de entorno de Render
-const TOKEN = process.env.TELEGRAM_TOKEN;
-const PORT = process.env.PORT || 3000;
-// Render te da automáticamente la URL externa de tu app mediante esta variable
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL; 
-
-if (!TOKEN) {
-  console.error("Falta la variable de entorno TELEGRAM_TOKEN");
-  process.exit(1);
-}
-
-if (!RENDER_URL) {
-  console.error("Falta la variable de entorno RENDER_EXTERNAL_URL o no se detectó el entorno de Render");
-  process.exit(1);
-}
-
-// 2. Inicializamos el bot SIN polling (¡Clave para evitar el error 409!)
-const bot = new TelegramBot(TOKEN);
-
-// 3. Configuramos Express y Multer
 const app = express();
+
+// Configuración de Multer para recibir archivos temporales de audio en memoria
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Middlewares
 app.use(cors());
 app.use(express.json());
-
-// Ruta webhook que Telegram llamará cada vez que alguien le hable al bot
-app.post(`/bot${TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Ruta de comprobación de salud (Health Check)
-app.get('/', (req, res) => {
-  res.send('¡El bot de Telegram y el backend están activos y funcionando en Render!');
-});
 
 // 1. Conexión a MongoDB (Permanente para Producción)
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
@@ -72,7 +43,7 @@ const licenseSchema = new mongoose.Schema({
   tokensUsados: { type: Number, default: 0 },
   plan: { type: String, default: 'Prueba Gratuita' },
   preapprovalId: { type: String }, // Identificador de la suscripción recurrente en Mercado Pago
-  cancelAt: { type: Date },        // Fecha límite programada para cancelar
+  cancelAt: { type: Date },       // Fecha límite programada para cancelar
   estadoCancelacionProgramada: { type: String, enum: ['PENDIENTE', 'EJECUTADA'], default: null } // Estado del cron de cancelación
 });
 const License = mongoose.model('License', licenseSchema);
@@ -121,7 +92,8 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
 
-// Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 or FREE-A9F4B2)
+
+// Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
   const bytes = crypto.randomBytes(6).toString('hex').toUpperCase();
   const part1 = bytes.substring(0, 4);
@@ -129,33 +101,6 @@ function generateLicenseKey(prefix = 'PRES') {
   const part3 = bytes.substring(8, 12);
   return `${prefix}-${part1}-${part2}-${part3}`;
 }
-
-// 4. Inicializamos el servidor Express y registramos el Webhook en Telegram automáticamente
-app.listen(PORT, async () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
-  
-  try {
-    const webhookUrl = `${RENDER_URL}/bot${TOKEN}`;
-    await bot.setWebHook(webhookUrl);
-    console.log(`Webhook configurado exitosamente en: ${webhookUrl}`);
-  } catch (error) {
-    console.error("Error al configurar el webhook:", error);
-  }
-});
-
-// ==========================================
-// LÓGICA DEL BOT DE TELEGRAM
-// ==========================================
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-
-  if (text === '/start') {
-    bot.sendMessage(chatId, '¡Hola! Mi bot ya está funcionando perfectamente en Render mediante Webhooks.');
-  } else {
-    bot.sendMessage(chatId, `Recibí tu mensaje: "${text}"`);
-  }
-});
 
 // ==========================================
 // FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
@@ -218,45 +163,6 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
     console.error('❌ Error al enviar correo con Brevo:', error.message);
   }
 }
-
-// Ruta webhook que Telegram llamará cada vez que alguien le hable al bot
-app.post(`/bot${TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Ruta de comprobación de salud (Health Check) para que Render sepa que el servicio está vivo
-app.get('/', (req, res) => {
-  res.send('¡El bot de Telegram está activo y funcionando en Render!');
-});
-
-// 4. Iniciamos el servidor y registramos el Webhook en Telegram automáticamente
-app.listen(PORT, async () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
-  
-  try {
-    const webhookUrl = `${RENDER_URL}/bot${TOKEN}`;
-    await bot.setWebHook(webhookUrl);
-    console.log(`Webhook configurado exitosamente en: ${webhookUrl}`);
-  } catch (error) {
-    console.error("Error al configurar el webhook:", error);
-  }
-});
-
-// ==========================================
-// TUS COMANDOS O LÓGICA DEL BOT AQUÍ ABAJO:
-// ==========================================
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-
-  // Ejemplo de respuesta simple
-  if (text === '/start') {
-    bot.sendMessage(chatId, '¡Hola! Mi bot ya está funcionando perfectamente en Render sin errores de conflicto.');
-  } else {
-    bot.sendMessage(chatId, `Recibí tu mensaje: "${text}"`);
-  }
-});
 
 // ==========================================
 // ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
