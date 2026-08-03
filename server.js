@@ -97,8 +97,8 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 // ==========================================
 // CONFIGURACIÓN DE TELEGRAM
 // ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '8966213741:AAGSLrMAjUfjCl9cdHgag0D4JMxI_j2y7oI';
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || '6501518853';
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN 
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID 
 
 // Inicializar Bot de Telegram (Polling)
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
