@@ -97,8 +97,13 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 // ==========================================
 // CONFIGURACIÓN DE TELEGRAM
 // ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN 
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID 
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
+
+// (Opcional pero recomendado) Una pequeña validación para que el servidor te avise si falta alguna
+if (!TELEGRAM_TOKEN || !ADMIN_CHAT_ID) {
+    console.warn('⚠️ Advertencia: TELEGRAM_TOKEN o ADMIN_CHAT_ID no están definidos en las variables de entorno.');
+}
 
 // Inicializar Bot de Telegram (Polling)
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
