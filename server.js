@@ -5,16 +5,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-
-dotenv.config();
 import OpenAI from 'openai';
 import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
-import TelegramBot from 'node-telegram-bot-api';
 
-
+dotenv.config();
 
 const app = express();
 
@@ -25,15 +22,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-// Asegúrate de declarar la variable leyendo de process.env
-const MONGODB_URI = process.env.MONGODB_URI;
-
-// Ahora sí, conéctate usando la variable correctamente definida
+// 1. Conexión a MongoDB (Permanente para Producción)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
 mongoose.connect(MONGODB_URI)
-  .then(() => {
-      console.log('✅ Conectado exitosamente a MongoDB Atlas');
-      iniciarEscuchaNuevosLeads();
-  })
+  .then(() => console.log('✅ Conectado exitosamente a MongoDB Atlas'))
   .catch(err => console.error('❌ Error conectando a MongoDB:', err));
 
 // Esquema de Licencias en Base de Datos
@@ -93,20 +85,6 @@ const CONTEXTO_NEGOCIO_DEFAULT = `
 Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
 Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
 `;
-
-// ==========================================
-// CONFIGURACIÓN DE TELEGRAM
-// ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
-
-// (Opcional pero recomendado) Una pequeña validación para que el servidor te avise si falta alguna
-if (!TELEGRAM_TOKEN || !ADMIN_CHAT_ID) {
-    console.warn('⚠️ Advertencia: TELEGRAM_TOKEN o ADMIN_CHAT_ID no están definidos en las variables de entorno.');
-}
-
-// Inicializar Bot de Telegram (Polling)
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
 import cron from 'node-cron';
@@ -185,38 +163,6 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
   } catch (error) {
     console.error('❌ Error al enviar correo con Brevo:', error.message);
   }
-}
-
-// Función para enviar alertas de nuevos leads en tiempo real a Telegram
-function iniciarEscuchaNuevosLeads() {
-    try {
-        const cambioStream = LeadEmpresa.watch();
-
-        cambioStream.on('change', async (change) => {
-            if (change.operationType === 'insert') {
-                const nuevoLead = change.fullDocument;
-                
-                const mensajeAviso = 
-                    `🚨 *¡NUEVA SOLICITUD / LICENCIA B2B!* 🚨\n\n` +
-                    `🏢 *Empresa:* ${nuevoLead.empresa || 'N/A'}\n` +
-                    `👤 *Contacto:* ${nuevoLead.contacto || 'N/A'}\n` +
-                    `📧 *Email:* ${nuevoLead.email || 'N/A'}\n` +
-                    `📞 *Teléfono:* ${nuevoLead.telefono || 'N/A'}\n` +
-                    `📦 *Licencias:* \`${nuevoLead.licencias || 'N/A'}\`\n` +
-                    `🌍 *País:* ${nuevoLead.pais || 'N/A'}\n` +
-                    `💬 *Mensaje:* ${nuevoLead.mensaje || 'Sin mensaje'}\n\n` +
-                    `⚡ _Revisa el panel corporativo para gestionar este lead._`;
-
-                try {
-                    await bot.sendMessage(ADMIN_CHAT_ID, mensajeAviso, { parse_mode: 'Markdown' });
-                } catch (error) {
-                    console.error('Error al enviar notificación de Telegram:', error);
-                }
-            }
-        });
-    } catch (e) {
-        console.log('Nota: Change Streams requiere un Replica Set de MongoDB Atlas activo.');
-    }
 }
 
 // ==========================================
