@@ -1,7 +1,7 @@
 // ==========================================
 // AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo) 
 // ==========================================
-dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -10,9 +10,8 @@ import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
-import TelegramBot from 'node-telegram-bot-api';
 
-
+dotenv.config();
 
 const app = express();
 
@@ -23,44 +22,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-
-// Instancia de OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Instancia de Mercado Pago (Producción / Suscripciones PreApproval)
-const mpClient = new MercadoPagoConfig({ 
-  accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
-});
-
-// Contexto base por defecto si el usuario no configura nada
-const CONTEXTO_NEGOCIO_DEFAULT = `
-Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
-Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
-`;
-
-const USAGE_LIMIT_FREE_TRIAL = 1;
-import cron from 'node-cron';
-import axios from 'axios';
-import 'dotenv/config';
-import nodemailer from 'nodemailer';
-
-// ==========================================
-// CONFIGURACIÓN DE TELEGRAM
-// ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || 'TU_TOKEN_DE_TELEGRAM_AQUI';
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || 'TU_CHAT_ID_AQUI';
-
-// Inicializar Bot de Telegram (Polling)
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-
 // 1. Conexión a MongoDB (Permanente para Producción)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
 mongoose.connect(MONGODB_URI)
-  .then(() => {
-      console.log('✅ Conectado exitosamente a MongoDB Atlas');
-      iniciarEscuchaNuevosLeads(); // <-- Agrega esta línea aquí
-  })
+  .then(() => console.log('✅ Conectado exitosamente a MongoDB Atlas'))
   .catch(err => console.error('❌ Error conectando a MongoDB:', err));
 
 // Esquema de Licencias en Base de Datos
@@ -105,6 +70,29 @@ const Suscriptor = mongoose.models.Suscriptor || mongoose.model('Suscriptor', ne
 
 const LeadEmpresa = mongoose.models.LeadEmpresa || mongoose.model('LeadEmpresa', leadEmpresaSchema);
 
+// Instancia de OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Instancia de Mercado Pago (Producción / Suscripciones PreApproval)
+const mpClient = new MercadoPagoConfig({ 
+  accessToken: process.env.MP_ACCESS_TOKEN || 'TU_ACCESS_TOKEN_DE_MERCADO_PAGO' 
+});
+
+// Contexto base por defecto si el usuario no configura nada
+const CONTEXTO_NEGOCIO_DEFAULT = `
+Somos una empresa que ofrece soluciones de software, páginas web, soporte técnico y automatizaciones para negocios.
+Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de acceso.
+`;
+
+const USAGE_LIMIT_FREE_TRIAL = 1;
+import cron from 'node-cron';
+import axios from 'axios';
+import 'dotenv/config';
+import nodemailer from 'nodemailer';
+
+
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -114,77 +102,6 @@ function generateLicenseKey(prefix = 'PRES') {
   const part3 = bytes.substring(8, 12);
   return `${prefix}-${part1}-${part2}-${part3}`;
 }
-
-// Change Stream para detectar nuevos registros en tiempo real y notificar por Telegram
-function iniciarEscuchaNuevosLeads() {
-    try {
-        // Observa el modelo LeadEmpresa que ya tienes definido en tu server
-        const cambioStream = LeadEmpresa.watch();
-
-        cambioStream.on('change', async (change) => {
-            if (change.operationType === 'insert') {
-                const nuevoLead = change.fullDocument;
-                
-                const mensajeAviso = 
-                    `🚨 *¡NUEVA SOLICITUD / LICENCIA B2B!* 🚨\n\n` +
-                    `🏢 *Empresa:* ${nuevoLead.empresa || 'N/A'}\n` +
-                    `👤 *Contacto:* ${nuevoLead.contacto || 'N/A'}\n` +
-                    `📧 *Email:* ${nuevoLead.email || 'N/A'}\n` +
-                    `📞 *Teléfono:* ${nuevoLead.telefono || 'N/A'}\n` +
-                    `📦 *Licencias:* \`${nuevoLead.licencias || 'N/A'}\`\n` +
-                    `🌍 *País:* ${nuevoLead.pais || 'N/A'}\n` +
-                    `💬 *Mensaje:* ${nuevoLead.mensaje || 'Sin mensaje'}\n\n` +
-                    `⚡ _Revisa el panel corporativo para gestionar este lead._`;
-
-                try {
-                    await bot.sendMessage(ADMIN_CHAT_ID, mensajeAviso, { parse_mode: 'Markdown' });
-                } catch (error) {
-                    console.error('Error al enviar notificación de Telegram:', error);
-                }
-            }
-        });
-    } catch (e) {
-        console.log('Nota: Change Streams requiere un Replica Set de MongoDB Atlas activo.');
-    }
-}
-
-// ==========================================
-// COMANDOS DE TELEGRAM (/informe y /start)
-// ==========================================
-bot.onText(/\/informe/, async (msg) => {
-    const chatId = msg.chat.id;
-
-    try {
-        const leads = await LeadEmpresa.find({});
-        const licencias = await License.find({});
-        
-        const totalLeads = leads.length;
-        const totalLicencias = licencias.length;
-
-        const activas = licencias.filter(l => l.status === 'active').length;
-        const trials = licencias.filter(l => l.status === 'trial').length;
-        const expiradas = licencias.filter(l => l.status === 'expired' || l.status === 'inactive').length;
-
-        const reporteTexto = 
-            `📊 *INFORME ACTUAL - SISTEMA* 📊\n\n` +
-            `🔹 *Cotizaciones B2B Registradas:* \`${totalLeads}\`\n` +
-            `🔹 *Total Licencias Creadas:* \`${totalLicencias}\`\n\n` +
-            `📌 *Desglose de Licencias:*\n` +
-            `  ✅ Activas (Pro/B2B): \`${activas}\`\n` +
-            `  ⏳ Pruebas (Free Trial): \`${trials}\`\n` +
-            `  ❌ Expiradas/Inactivas: \`${expiradas}\`\n\n` +
-            `🚀 _Servidor operativo y sincronizado con Render._`;
-
-        await bot.sendMessage(chatId, reporteTexto, { parse_mode: 'Markdown' });
-    } catch (error) {
-        console.error('Error al generar el informe en Telegram:', error);
-        bot.sendMessage(chatId, '❌ Ocurrió un error al consultar las estadísticas en la base de datos.');
-    }
-});
-
-bot.onText(/\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, '🤖 *Bot de Alertas Activo.*\n\nComandos disponibles:\n/informe - Muestra el resumen métrico actual de la base de datos.', { parse_mode: 'Markdown' });
-});
 
 // ==========================================
 // FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
