@@ -10,10 +10,6 @@ import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
-import TelegramBot from 'node-telegram-bot-api';
-import cron from 'node-cron';
-import axios from 'axios';
-import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -26,35 +22,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// CONFIGURACIÓN DE TELEGRAM (WEBHOOK PARA RENDER)
-// ==========================================
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
-
-if (!TELEGRAM_TOKEN) {
-  console.warn('⚠️ Advertencia: TELEGRAM_TOKEN no está definido en las variables de entorno.');
-}
-
-// Inicializar Bot de Telegram SIN polling (Modo Webhook para evitar conflicto 409 en Render)
-const bot = new TelegramBot(TELEGRAM_TOKEN || '');
-
-// Ruta webhook que Telegram llamará automáticamente
-if (TELEGRAM_TOKEN) {
-  app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-  });
-}
-
 // 1. Conexión a MongoDB (Permanente para Producción)
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
 mongoose.connect(MONGODB_URI)
-  .then(() => {
-      console.log('✅ Conectado exitosamente a MongoDB Atlas');
-      iniciarEscuchaNuevosLeads();
-  })
+  .then(() => console.log('✅ Conectado exitosamente a MongoDB Atlas'))
   .catch(err => console.error('❌ Error conectando a MongoDB:', err));
 
 // Esquema de Licencias en Base de Datos
@@ -116,6 +87,12 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
+import cron from 'node-cron';
+import axios from 'axios';
+import 'dotenv/config';
+import nodemailer from 'nodemailer';
+
+
 
 // Helper para generar claves de licencia únicas (ej: PRES-A1B2-C3D4-E5F6 o FREE-A9F4B2)
 function generateLicenseKey(prefix = 'PRES') {
@@ -155,7 +132,7 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
   const payload = {
     sender: {
       name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
-      email: process.env.BREVO_SENDER_EMAIL || 'copilot.ia@prestigecloser.com'
+      email: process.env.BREVO_SENDER_EMAIL || 'copilot.ia@prestigecloser.com' // <-- Sustitúyelo aquí
     },
     to: [
       {
@@ -188,40 +165,6 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
   }
 }
 
-// Función para enviar alertas de nuevos leads en tiempo real a Telegram
-function iniciarEscuchaNuevosLeads() {
-    try {
-        const cambioStream = LeadEmpresa.watch();
-
-        cambioStream.on('change', async (change) => {
-            if (change.operationType === 'insert') {
-                const nuevoLead = change.fullDocument;
-                
-                const mensajeAviso = 
-                    `🚨 *¡NUEVA SOLICITUD / LICENCIA B2B!* 🚨\n\n` +
-                    `🏢 *Empresa:* ${nuevoLead.empresa || 'N/A'}\n` +
-                    `👤 *Contacto:* ${nuevoLead.contacto || 'N/A'}\n` +
-                    `📧 *Email:* ${nuevoLead.email || 'N/A'}\n` +
-                    `📞 *Teléfono:* ${nuevoLead.telefono || 'N/A'}\n` +
-                    `📦 *Licencias:* \`${nuevoLead.licencias || 'N/A'}\`\n` +
-                    `🌍 *País:* ${nuevoLead.pais || 'N/A'}\n` +
-                    `💬 *Mensaje:* ${nuevoLead.mensaje || 'Sin mensaje'}\n\n` +
-                    `⚡ _Revisa el panel corporativo para gestionar este lead._`;
-
-                try {
-                    if (ADMIN_CHAT_ID && TELEGRAM_TOKEN) {
-                        await bot.sendMessage(ADMIN_CHAT_ID, mensajeAviso, { parse_mode: 'Markdown' });
-                    }
-                } catch (error) {
-                    console.error('Error al enviar notificación de Telegram:', error);
-                }
-            }
-        });
-    } catch (e) {
-        console.log('Nota: Change Streams requiere un Replica Set de MongoDB Atlas activo.');
-    }
-}
-
 // ==========================================
 // ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
 // ==========================================
@@ -233,6 +176,7 @@ app.post('/api/generar-prueba', async (req, res) => {
       return res.status(400).json({ success: false, message: 'El correo es obligatorio.' });
     }
 
+    // 1. Verificar si el correo ya pidió su prueba o tiene una licencia
     const licenciaExistente = await License.findOne({ email });
     if (licenciaExistente) {
       return res.status(400).json({ 
@@ -241,10 +185,14 @@ app.post('/api/generar-prueba', async (req, res) => {
       });
     }
 
+    // 2. Generar la clave de prueba gratuita
     const licenseKey = generateLicenseKey('FREE');
+
+    // 3. Definir expiración (ej. 30 días o tiempo ilimitado hasta agotar tokens)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
+    // 4. Guardar en MongoDB con el límite de 300 respuestas
     const nuevaLicencia = new License({
       email: email,
       licenseKey: licenseKey,
@@ -257,6 +205,7 @@ app.post('/api/generar-prueba', async (req, res) => {
     });
     await nuevaLicencia.save();
 
+    // 5. Enviar el correo con la clave de prueba
     const htmlContenido = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
             <h2 style="color: #28a745;">¡Bienvenido a Copilot.ai! 🚀</h2>
@@ -296,6 +245,9 @@ async function validarLicencia(req, res, next) {
   const rawLicenseKey = req.headers['x-user-license'] || 'TRIAL_KEY';
   const licenseKey = rawLicenseKey.trim();
 
+  // ------------------------------------------------------------------
+  // ⚡ MODO PRUEBAS: Bypass idéntico a una Suscripción Pro Activa
+  // ------------------------------------------------------------------
   if (licenseKey === DEV_MASTER_KEY) {
     req.userLicenseDoc = {
       licenseKey: DEV_MASTER_KEY,
@@ -303,13 +255,15 @@ async function validarLicencia(req, res, next) {
       plan: 'Pro (Mercado Pago)',
       limiteTokens: 999999,
       tokensUsados: 0,
-      save: async () => {}
+      save: async () => {} // Función dummy vacía
     };
     return next();
   }
+  // ------------------------------------------------------------------
 
   let user = await License.findOne({ licenseKey });
 
+  // 1. Si la licencia NO existe en absoluto en la base de datos
   if (!user) {
     if (licenseKey === 'TRIAL_KEY') {
       const expiresAt = new Date();
@@ -331,6 +285,7 @@ async function validarLicencia(req, res, next) {
     }
   }
 
+  // 2. Si la licencia SÍ existe, procedemos a validar su estado de vigencia
   if (user.status === 'trial') {
     const totalUsado = user.tokensUsados !== undefined ? user.tokensUsados : user.usageCount;
     const limiteActual = user.limiteTokens || USAGE_LIMIT_FREE_TRIAL;
@@ -377,6 +332,7 @@ app.post('/api/admin/crear-checkout-b2b', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Faltan parámetros obligatorios para la cotización B2B.' });
     }
 
+    // Obtener tasa de cambio USD a COP (o puedes manejarlo directamente en USD si tu cuenta lo soporta)
     let tasaCambio = 4000;
     try {
       const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
@@ -392,19 +348,21 @@ app.post('/api/admin/crear-checkout-b2b', async (req, res) => {
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
 
+    // Crear suscripción PreApproval en Mercado Pago para la empresa
     const preApproval = new PreApproval(mpClient);
     const result = await preApproval.create({
       body: {
         reason: `Plan Empresarial B2B - ${empresaNombre} (${cantidadLicencias} Cuentas)`,
         auto_recurring: {
           frequency: 1,
-          frequency_type: 'months',
+          frequency_type: 'months', // Cobro mensual recurrente
           transaction_amount: Number(precioFinalCOP),
           currency_id: 'COP'
         },
         back_url: `${frontendUrl}/gracias.html`,
         payer_email: emailContacto,
         status: 'pending',
+        // Pasamos metadata o parámetros en el external_reference para identificar el pedido en el Webhook
         external_reference: JSON.stringify({
           tipo: 'b2b',
           empresaNombre,
@@ -422,7 +380,6 @@ app.post('/api/admin/crear-checkout-b2b', async (req, res) => {
     return res.status(500).json({ success: false, error: 'Error al procesar la suscripción corporativa.' });
   }
 });
-
 // ==========================================
 // ENDPOINT NUEVO: Generador de System Prompt Personalizado (Meta-Prompt)
 // ==========================================
@@ -474,7 +431,7 @@ app.post('/api/generar-system-prompt', async (req, res) => {
 // ==========================================
 app.post('/api/crear-checkout', async (req, res) => {
   try {
-    const { email, plan } = req.body;
+    const { email, plan } = req.body; // plan: 'mensual' ($15) o 'anual' ($120)
     const precio = plan === 'anual' ? 120 : 15;
     const frecuencia = 1;
     const frecuenciaTipo = plan === 'anual' ? 'years' : 'months';
@@ -514,7 +471,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
     const { cliente, mensaje } = req.body;
 
     if (!mensaje) {
-      return res.status(400).json({ error: 'El parámetro "mensaje" is obligatorio.' });
+      return res.status(400).json({ error: 'El parámetro "mensaje" es obligatorio.' });
     }
 
     const systemPrompt = `
@@ -556,7 +513,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT 2: Generar Respuesta Universal
+// ENDPOINT 2: Generar Respuesta Universal (Con Mensajes Personalizados por Tipo de Licencia)
 // ==========================================
 app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
@@ -570,15 +527,26 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       tono 
     } = req.body;
 
+    // 🔎 LOGS DE DEPURACIÓN
+    console.log('\n================ DEPURACIÓN DE MEMORIA / HISTORIAL ================');
+    console.log('📥 Mensaje actual del cliente:', mensajeCliente);
+    console.log('📚 ¿Llegó historialChat?:', historialChat ? `Sí (Elementos: ${historialChat.length})` : 'NO / VACÍO');
+    if (historialChat && Array.isArray(historialChat)) {
+      console.log('📋 Contenido del historial:', JSON.stringify(historialChat, null, 2));
+    }
+    console.log('===================================================================\n');
+
     if (!mensajeCliente) {
       return res.status(400).json({ error: 'El parámetro "mensajeCliente" es obligatorio.' });
     }
 
+    // 🛡️ VALIDACIÓN Y DIFERENCIACIÓN SEGÚN TIPO DE PLAN / LICENCIA
     if (req.userLicenseDoc) {
       const tipoLicencia = (req.userLicenseDoc.tipo || req.userLicenseDoc.status || 'trial').toLowerCase();
       const tokensUsados = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
       const limiteTokens = req.userLicenseDoc.limiteTokens !== undefined ? req.userLicenseDoc.limiteTokens : 20;
 
+      // 1. Si es TRIAL y agotó sus tokens gratuitos
       if (tipoLicencia === 'trial' && tokensUsados >= limiteTokens) {
         return res.status(403).json({
           code: 'TRIAL_EXPIRED',
@@ -586,6 +554,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       }
 
+      // 2. Si es STARTER y agotó sus tokens del mes
       if (tipoLicencia === 'starter' && tokensUsados >= limiteTokens) {
         return res.status(403).json({
           code: 'STARTER_EXPIRED',
@@ -593,6 +562,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       }
 
+      // 3. Si es PRO y agotó sus tokens del mes
       if (tipoLicencia === 'pro' && tokensUsados >= limiteTokens) {
         return res.status(403).json({
           code: 'PRO_EXPIRED',
@@ -600,6 +570,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       }
 
+      // 4. Si la suscripción general está vencida, inactiva o suspendida
       if (tipoLicencia === 'expired' || tipoLicencia === 'inactive' || req.userLicenseDoc.suspended) {
         return res.status(403).json({
           code: 'SUBSCRIPTION_EXPIRED',
@@ -608,6 +579,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       }
     }
 
+    // CASO ESPECIAL: Análisis de Lectura / Explicación
     if (tipoAccion === 'analizar_explicar') {
       let conversacionContexto = '';
       if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
@@ -635,6 +607,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       return res.json({ respuesta: completionAnalisis.choices[0].message.content.trim() });
     }
 
+    // 1. Configurar Comportamiento según Modo
     let reglaModo = '';
     switch (modoOperacion) {
       case 'soporte':
@@ -663,11 +636,12 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         reglaModo = `
           ROL: Especialista en Ventas y Cierre Comercial por WhatsApp.
           OBJETIVO: ${instruccionAccion}
-          INSTRUCCIÓN EXTRA: Si el cliente ya confirmó una cita, aceptó el enlace o cerró la negociación, NO hagas más preguntas. Limítate a confirmar con un mensaje amable, directo y profesional.
+          INSTRUCCIÓN EXTRA: Si el cliente ya confirmó una cita, aceptó el enlace o cerró la negociación, NO hagas más preguntas. Limítate a confirmar con un mensaje amable, directo y profesional (ej: "Perfecto, quedamos agendados. ¡Un saludo!"). Si la conversación sigue abierta, termina con un llamado a la acción directo.
         `;
         break;
     }
 
+    // 2. Configurar Instrucciones de Tono
     let instruccionTono = '';
     switch (tono) {
       case 'empatico':
@@ -691,6 +665,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         break;
     }
 
+    // 3. System Prompt Compuesto
     const promptUsuarioCustom = promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0 
       ? `INSTRUCCIONES DE COMPORTAMIENTO Y ENTRENAMIENTO PERSONALIZADO DEL CLIENTE:\n${promptEntrenamientoUsuario}`
       : `INSTRUCCIONES DE COMPORTAMIENTO:\n${reglaModo}`;
@@ -706,15 +681,21 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       REGLAS DE FORMATO OBLIGATORIAS (ESTRICTO):
       - Tono a aplicar: ${instruccionTono}
       - Longitud: MÁXIMO 2 oraciones cortas. Ve al grano de inmediato.
-      - ESTRICTAMENTE PROHIBIDO usar fórmulas corporativas robóticas, frases acartonadas como "¡Un saludo!" al final, ni despedidas formales.
-      - Habla como un asesor experto conversando por WhatsApp: cercano, fluido y natural.
+      - ESTRICTAMENTE PROHIBIDO usar fórmulas corporativas robóticas, frases acartonadas como "¡Un saludo!" al final, ni despedidas corporativas formales de call-center.
+      - Si la cita ya quedó confirmada, responde de forma relajada y casual (Ej: "Listo, nos vemos mañana a las 3 PM por acá. ¡Cualquier cosa me avisas!").
+      - Habla como un asesor experto de carne y hueso conversando por WhatsApp: cercano, fluido, natural y cero robótico.
     `;
 
+    // 4. Construir Mensajes para OpenAI mapeando CORRECTAMENTE roles user / assistant
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
       historialChat.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
+        
+        // CORRECCIÓN CRÍTICA DE ROLES: 
+        // Si el remitente es 'bot', 'assistant' o 'asesor', va como 'assistant'. 
+        // Todo lo demás (cliente, user, etc.) va como 'user'.
         const rolOpenAI = (remitente === 'bot' || remitente === 'assistant' || remitente === 'asesor') ? 'assistant' : 'user';
         
         mensajesChatOpenAI.push({
@@ -723,6 +704,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       });
 
+      // Verificar si el último mensaje del historial ya coincide con el mensajeCliente actual
       const ultimoMsgObj = historialChat[historialChat.length - 1];
       const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
       const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
@@ -742,6 +724,9 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       });
     }
 
+    // 🔎 LOG FINAL DE PAYLOAD ENVIADO A OPENAI
+    console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: mensajesChatOpenAI,
@@ -751,6 +736,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 
     const respuestaIA = completion.choices[0].message.content.trim();
 
+    // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL / PLANES
     if (req.userLicenseDoc) {
       const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
       req.userLicenseDoc.tokensUsados = currentTokens + 1;
@@ -767,7 +753,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Detalles de Licencia
+// ENDPOINT PARA OBTENER TODA LA INFORMACIÓN DE UNA LICENCIA/USUARIO
 // ==========================================
 app.post('/api/admin/detalles-licencia', async (req, res) => {
     try {
@@ -815,7 +801,7 @@ app.post('/api/admin/detalles-licencia', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Eliminar Cuenta Free por Correo
+// ENDPOINT PARA ELIMINAR CUENTA/LICENCIA FREE POR CORREO
 // ==========================================
 app.post('/api/admin/eliminar-cuenta-free', async (req, res) => {
     try {
@@ -829,6 +815,7 @@ app.post('/api/admin/eliminar-cuenta-free', async (req, res) => {
             return res.status(400).json({ success: false, error: 'El correo electrónico es obligatorio.' });
         }
 
+        // Buscar y eliminar la licencia que coincida con el correo y esté en estado 'trial' o plan 'Prueba Gratuita'
         const resultado = await License.deleteOne({
             email: email.trim().toLowerCase(),
             $or: [
@@ -856,7 +843,7 @@ app.post('/api/admin/eliminar-cuenta-free', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Programar Cancelación
+// 1. ENDPOINT PARA PROGRAMAR LA CANCELACIÓN
 // ==========================================
 app.post('/api/admin/programar-cancelacion', async (req, res) => {
     try {
@@ -870,6 +857,7 @@ app.post('/api/admin/programar-cancelacion', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (fecha y identificador).' });
         }
 
+        // Buscar por preapprovalId o por correo electrónico en el esquema License
         const query = preapprovalId ? { preapprovalId } : { email: emailContacto };
         
         const subActualizada = await License.findOneAndUpdate(
@@ -898,7 +886,7 @@ app.post('/api/admin/programar-cancelacion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Listar Pendientes de Cancelar
+// 2. ENDPOINT PARA VER LA LISTA DE PLANES PENDIENTES DE CANCELAR
 // ==========================================
 app.post('/api/admin/listar-pendientes', async (req, res) => {
     try {
@@ -907,6 +895,7 @@ app.post('/api/admin/listar-pendientes', async (req, res) => {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
+        // Buscar todas las licencias con cancelación programada pendiente
         const pendientes = await License.find({ estadoCancelacionProgramada: 'PENDIENTE' });
 
         return res.json({ success: true, pending: pendientes });
@@ -916,7 +905,7 @@ app.post('/api/admin/listar-pendientes', async (req, res) => {
 });
 
 // ==========================================
-// CRON JOB: Ejecución diaria a medianoche
+// 3. CRON JOB: SE EJECUTA TODOS LOS DÍAS A MEDIANOCHE (00:00)
 // ==========================================
 cron.schedule('0 0 * * *', async () => {
     console.log('[CRON] Verificando suscripciones programadas para cancelar hoy...');
@@ -924,6 +913,7 @@ cron.schedule('0 0 * * *', async () => {
         const hoy = new Date();
         hoy.setHours(0, 0, 0, 0);
 
+        // Buscar licencias cuya fecha límite sea hoy o anterior y sigan pendientes
         const porCancelar = await License.find({
             estadoCancelacionProgramada: 'PENDIENTE',
             cancelAt: { $lte: hoy }
@@ -932,6 +922,7 @@ cron.schedule('0 0 * * *', async () => {
         for (const sub of porCancelar) {
             try {
                 if (sub.preapprovalId) {
+                    // Cancelar en la API de Mercado Pago automáticamente usando axios
                     await axios.put(
                         `https://api.mercadopago.com/preapproval/${sub.preapprovalId}`,
                         { status: 'cancelled' },
@@ -958,16 +949,18 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ==========================================
-// ENDPOINT: Cotización Empresarial B2B
+// ENDPOINT: Cotización Empresarial B2B (Sin Correos, Guardado en Base de Datos)
 // ==========================================
 app.post('/api/cotizacion-empresarial', async (req, res) => {
     try {
         const { empresa, contacto, email, telefono, licencias, pais, mensaje } = req.body;
 
+        // Validación básica
         if (!empresa || !contacto || !email || !telefono) {
             return res.status(400).json({ success: false, error: "Faltan campos obligatorios." });
         }
 
+        // Guardar directamente en la base de datos de MongoDB
         await LeadEmpresa.create({
             empresa, 
             contacto, 
@@ -993,12 +986,12 @@ app.post('/api/cotizacion-empresarial', async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT: Métricas Admin
-// ==========================================
+// Agrega este endpoint en tu archivo principal del servidor Express (ej. server.js o index.js)
+
 app.get('/api/admin/metricas', async (req, res) => {
     try {
-        const suscriptores = await Suscriptor.find();
+        // Supongamos que obtienes los suscriptores desde tu base de datos (MongoDB/PostgreSQL)
+        const suscriptores = await Suscriptor.find(); // O tu método de consulta
 
         let ventasHistoricasTotales = 0;
         let mrrActual = 0;
@@ -1013,17 +1006,19 @@ app.get('/api/admin/metricas', async (req, res) => {
             if (sub.estado === 'Activo') {
                 mrrActual += monto;
                 activosCount++;
-                ventasHistoricasTotales += monto * 4;
+                ventasHistoricasTotales += monto * 4; // Estimado histórico acumulado
             } else if (sub.estado === 'Pausado') {
                 pausadosCount++;
-                dejadoDeGanarMRR += monto;
+                dejadoDeGanarMRR += monto; // Dinero dejado de percibir por pausa
             } else if (sub.estado === 'Cancelado') {
                 canceladosCount++;
-                dejadoDeGanarMRR += monto;
+                dejadoDeGanarMRR += monto; // Dinero dejado de percibir por cancelación definitiva
             }
         });
 
+        // Proyección mes siguiente: MRR actual más un factor de crecimiento estimado (ej. 10% conservador)
         const proyeccionMesSiguiente = mrrActual * 1.10;
+
         const tasaChurn = suscriptores.length > 0 
             ? ((canceladosCount / suscriptores.length) * 100).toFixed(1) 
             : 0;
@@ -1036,8 +1031,8 @@ app.get('/api/admin/metricas', async (req, res) => {
                 activosCount,
                 pausadosCount,
                 canceladosCount,
-                dejadoDeGanarMRR,
-                proyeccionMesSiguiente,
+                dejadoDeGanarMRR, // <--- Lo que se ha dejado de ganar por planes pausados/cancelados
+                proyeccionMesSiguiente, // <--- Proyección estimada para el mes siguiente
                 tasaChurn: `${tasaChurn}%`
             }
         });
@@ -1048,21 +1043,23 @@ app.get('/api/admin/metricas', async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT: Suscriptores Admin
-// ==========================================
 app.get('/api/admin/suscriptores', async (req, res) => {
     try {
         const db = mongoose.connection.db;
+        
+        // 1. Obtiene todas las colecciones que existen en la base de datos actual
         const collections = await db.listCollections().toArray();
         let suscriptores = [];
 
+        // 2. Busca de forma inteligente en qué colección hay documentos guardados
         for (let colInfo of collections) {
             const colName = colInfo.name;
+            // Ignoramos colecciones internas del sistema si las hubiera
             if (colName.startsWith('system.')) continue;
 
             const docs = await db.collection(colName).find({}).toArray();
             
+            // Si encontramos una colección que tenga documentos, los adaptamos al formato del CRM
             if (docs && docs.length > 0) {
                 suscriptores = docs.map(item => ({
                     fecha: item.createdAt || item.fecha || item.date || new Date(),
@@ -1072,7 +1069,7 @@ app.get('/api/admin/suscriptores', async (req, res) => {
                     monto: Number(item.monto !== undefined ? item.monto : (item.price || item.amount || 0)),
                     estado: item.estado || item.status || 'Activo'
                 }));
-                break;
+                break; // Usamos la primera colección con datos que encuentre
             }
         }
 
@@ -1100,20 +1097,19 @@ app.get('/api/admin/suscriptores', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Cotizaciones Admin
+// ENDPOINT: Obtener las Solicitudes para el Panel Admin
 // ==========================================
 app.get('/api/admin/cotizaciones', async (req, res) => {
     try {
-        const leads = await LeadEmpresa.find().sort({ fecha: -1 });
+        const leads = await LeadEmpresa.find().sort({ fecha: -1 }); // Ordena de más reciente a más antiguo
         return res.status(200).json({ success: true, leads });
     } catch (error) {
         console.error("Error al obtener las cotizaciones:", error);
         return res.status(500).json({ success: false, error: "Error al cargar los datos." });
     }
 });
-
 // ==========================================
-// ENDPOINT: Listar Cuentas Free
+// ENDPOINT PARA LISTAR CUENTAS/LICENCIAS FREE
 // ==========================================
 app.post('/api/admin/listar-cuentas-free', async (req, res) => {
     try {
@@ -1123,6 +1119,7 @@ app.post('/api/admin/listar-cuentas-free', async (req, res) => {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
+        // Buscar todas las licencias que estén en estado 'trial' o cuya plan sea 'Prueba Gratuita'
         const cuentas = await License.find({
             $or: [
                 { status: 'trial' },
@@ -1141,19 +1138,21 @@ app.post('/api/admin/listar-cuentas-free', async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT: Listar Todas las Licencias
-// ==========================================
+// Endpoint para listar todas las licencias del sistema (Panel de Administrador)
 app.post('/api/admin/listar-todas-licencias', async (req, res) => {
     try {
         const { adminSecret } = req.body;
 
+        // Validar contraseña de administrador del backend
         if (adminSecret !== process.env.ADMIN_SECRET) {
             return res.status(401).json({ success: false, error: "No autorizado. Admin Secret incorrecto." });
         }
 
-        const licencias = await License.find({}).lean();
+        // ⚠️ CAMBIA 'Licencia' por el nombre de tu modelo/tabla en la base de datos
+        // (ej: License, User, etc., dependiendo de cómo guardes las licencias)
+        const licencias = await Licencia.find({}).lean();
 
+        // Opcional: Mapear los campos para asegurar que el frontend los reciba con los nombres correctos
         const licenciasFormateadas = licencias.map(lic => ({
             email: lic.email || lic.correo || "N/A",
             licenseKey: lic.licenseKey || lic.key || "N/A",
@@ -1174,13 +1173,12 @@ app.post('/api/admin/listar-todas-licencias', async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT: Cancelar Suscripción MP
-// ==========================================
+// Ruta para cancelar una suscripción (Preapproval) en Mercado Pago
 app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
     try {
         const { adminSecret, preapprovalId } = req.body;
 
+        // 1. Validar el secreto de administrador
         if (adminSecret !== process.env.ADMIN_SECRET) {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
@@ -1189,12 +1187,13 @@ app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Falta el preapprovalId de la suscripción.' });
         }
 
+        // 2. Realizar petición PUT a la API de Mercado Pago para cancelar
         const response = await axios.put(
             `https://api.mercadopago.com/preapproval/${preapprovalId}`,
             { status: 'cancelled' },
             {
                 headers: {
-                    'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+                    'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`, // Tu token de acceso de Mercado Pago
                     'Content-Type': 'application/json'
                 }
             }
@@ -1215,9 +1214,7 @@ app.post('/api/admin/cancelar-suscripcion', async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT: Obtener Link Suscripción
-// ==========================================
+// Endpoint para recuperar el link de pago/actualización de una suscripción existente
 app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
   try {
     const { adminSecret, emailContacto } = req.body;
@@ -1226,13 +1223,14 @@ app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
       return httpRes.status(401).json({ success: false, error: "No autorizado" });
     }
 
+    // 1. Consultar a la API de Mercado Pago las pre-aprobaciones (suscripciones) filtrando por correo
     const mpResponse = await axios.get(`https://api.mercadopago.com/preapproval/search`, {
       headers: {
         'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`
       },
       params: {
         payer_email: emailContacto,
-        status: 'authorized'
+        status: 'authorized' // O 'pending' si el pago falló y está pendiente de reintento
       }
     });
 
@@ -1245,7 +1243,10 @@ app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
       });
     }
 
+    // Tomamos la suscripción más reciente de ese cliente
     const suscripcionActiva = suscripciones[0];
+    
+    // Mercado Pago devuelve la URL de init_point (o el link de pago de la suscripción)
     const linkPagoExistente = suscripcionActiva.init_point;
 
     return httpRes.json({
@@ -1262,17 +1263,23 @@ app.post('/api/admin/obtener-link-suscripcion', async (req, httpRes) => {
 });
 
 // ==========================================
-// ENDPOINT: Crear Licencia Feedback
+// ENDPOINT NUEVO: Crear Licencias de Feedback (Admin)
 // ==========================================
 app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
+  console.log('📥 [BACKEND] Petición recibida en /api/admin/crear-licencia-feedback');
+  console.log('📦 [BACKEND] Body recibido:', req.body);
+
   try {
     const { email, durationDays, maxActivations, adminSecret } = req.body;
 
+    // Validar contraseña de administrador
     if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
+      console.warn('❌ [BACKEND] Intento de acceso no autorizado con secret:', adminSecret);
       return res.status(403).json({ success: false, error: 'No autorizado. Admin secret incorrecto.' });
     }
 
     if (!email || !durationDays || !maxActivations) {
+      console.warn('❌ [BACKEND] Faltan parámetros en la petición.');
       return res.status(400).json({ success: false, error: 'Faltan parámetros (email, durationDays, maxActivations).' });
     }
 
@@ -1293,7 +1300,9 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
     });
 
     await nuevaLicencia.save();
+    console.log(`✅ [BACKEND] Licencia creada y guardada en MongoDB: ${licenseKey} para ${email}`);
 
+    // Enviar correo automático con Brevo
     try {
       const htmlContenido = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
@@ -1309,7 +1318,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
       `;
       await enviarCorreoBrevo(email, licenseKey, 'Tu acceso exclusivo de feedback 🎁', htmlContenido);
     } catch (mailErr) {
-      console.warn('⚠️ Falló el envío de correo de feedback:', mailErr.message);
+      console.warn('⚠️ [BACKEND] La licencia se creó pero falló el envío de correo:', mailErr.message);
     }
 
     return res.json({ 
@@ -1320,13 +1329,13 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error interno procesando licencia:', error);
+    console.error('❌ [BACKEND ERROR] Error interno procesando licencia:', error);
     return res.status(500).json({ success: false, error: error.message || 'Error interno del servidor.' });
   }
 });
 
 // ==========================================
-// ENDPOINT: Transcribir Audio Cliente (Whisper)
+// NUEVO ENDPOINT: Transcribir Audio del Cliente (OpenAI Whisper)
 // ==========================================
 app.post('/api/transcribir-audio-cliente', upload.single('audio'), async (req, res) => {
   try {
@@ -1351,9 +1360,7 @@ app.post('/api/transcribir-audio-cliente', upload.single('audio'), async (req, r
   }
 });
 
-// ==========================================
-// ENDPOINT: Generar Audio IA (TTS)
-// ==========================================
+// Ruta para generar audio con la API de OpenAI TTS (Notas de voz)
 app.post('/api/generar-audio-ia', async (req, res) => {
   try {
     const { texto } = req.body;
@@ -1373,7 +1380,7 @@ app.post('/api/generar-audio-ia', async (req, res) => {
         model: 'tts-1', 
         voice: 'alloy', 
         input: texto,
-        response_format: 'opus'
+        response_format: 'opus' // Formato idóneo para notas de voz en WhatsApp Web
       })
     });
 
@@ -1398,27 +1405,29 @@ app.post('/api/generar-audio-ia', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Crear Preferencia MP
+// RUTA: /api/crear-preferencia-mp
 // ==========================================
 app.post('/api/crear-preferencia-mp', async (req, res) => {
   try {
     const { email, plan } = req.body;
     
-    let precioUSD = 10;
+    // 1. Definir precios y límites según el plan elegido
+    let precioUSD = 10; // Plan Starter por defecto ($10 USD / mes)[cite: 4]
     let frecuencia = 1;
     let frecuenciaTipo = 'months';
     let limiteRespuestasDia = 200;
     let incluyeAudio = false;
 
     if (plan === 'pro') {
-      precioUSD = 59;
+      precioUSD = 59; // Plan Pro / Completo ($59 USD / mes)[cite: 4]
       frecuencia = 1;
       frecuenciaTipo = 'months';
-      limiteRespuestasDia = 999999;
+      limiteRespuestasDia = 999999; // Ilimitado[cite: 4]
       incluyeAudio = true;
     }
 
-    let tasaCambio = 4000;
+    // 2. Obtener la tasa de cambio actual USD a COP automáticamente
+    let tasaCambio = 4000; // Valor de respaldo (Fallback)[cite: 4]
     try {
       const responseTasa = await fetch('https://open.er-api.com/v6/latest/USD');
       if (responseTasa.ok) {
@@ -1428,13 +1437,16 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
         }
       }
     } catch (errTasa) {
-      console.warn('No se pudo actualizar la tasa del dólar:', errTasa.message);
+      console.warn('No se pudo actualizar la tasa del dólar, usando valor de respaldo:', errTasa.message);
     }
 
+    // 3. Calcular el precio final en Pesos Colombianos (COP) redondeado
     const precioFinalCOP = Math.round(precioUSD * tasaCambio);
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://copilot.prestigecloser.com';
     const backendUrl = process.env.BACKEND_URL || 'https://copilot-ia-backend.onrender.com';
 
+    // 4. Crear la suscripción recurrente mediante PreApproval de Mercado Pago
     const preApproval = new PreApproval(mpClient);
     const result = await preApproval.create({
       body: {
@@ -1465,12 +1477,12 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
   }
 });
 
-// ==========================================
-// ENDPOINT: Verificar Suscripción
-// ==========================================
 app.get('/api/verificar-suscripcion', async (req, res) => {
-  const { id } = req.query;
+  const { id } = req.query; // Puede ser el email o la licenseKey del usuario
 
+  // ------------------------------------------------------------------
+  // ⚡ MODO PRUEBAS: Respuesta idéntica a Plan Pro si se usa la Key Maestra
+  // ------------------------------------------------------------------
   if (id && id.trim() === DEV_MASTER_KEY) {
     return res.json({ 
       valida: true,
@@ -1481,6 +1493,7 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
       limiteRespuestasDia: 999999
     });
   }
+  // ------------------------------------------------------------------
 
   try {
     const usuarioBD = await License.findOne({ 
@@ -1515,7 +1528,7 @@ app.get('/api/verificar-suscripcion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Webhook Mercado Pago
+// ENDPOINT WEBHOOK: Mercado Pago + Brevo (Integrado con B2B y Usuarios Individuales)
 // ==========================================
 app.post('/api/webhook-mercadopago', async (req, res) => {
   try {
@@ -1530,20 +1543,25 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
       if (subscriptionInfo) {
         const payerEmail = subscriptionInfo.payer_email;
-        const status = subscriptionInfo.status;
+        const status = subscriptionInfo.status; // 'authorized', 'paused', 'cancelled', etc.
 
+        // 1. SI ESTÁ AUTORIZADO (PAGO EXITOSO O NUEVA SUSCRIPCIÓN)
         if (status === 'authorized') {
           const expiresAt = new Date();
-          expiresAt.setDate(expiresAt.getDate() + 35);
+          expiresAt.setDate(expiresAt.getDate() + 35); // Extiende 35 días
 
+          // Verificar si trae datos corporativos en el external_reference
           let datosB2B = null;
           try {
             if (subscriptionInfo.external_reference) {
               datosB2B = JSON.parse(subscriptionInfo.external_reference);
             }
-          } catch (e) {}
+          } catch (e) {
+            // No es B2B, es una suscripción regular o estándar
+          }
 
           if (datosB2B && datosB2B.tipo === 'b2b') {
+            // 🏢 CASO B2B: Generar Licencia Matriz con Múltiples Activaciones
             const newLicenseKey = generateLicenseKey('B2B');
             const nuevaLicenciaCorporativa = new License({
               licenseKey: newLicenseKey,
@@ -1552,14 +1570,16 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
               usageCount: 0,
               tokensUsados: 0,
               limiteTokens: 999999,
-              maxActivations: Number(datosB2B.cantidadLicencias),
+              maxActivations: Number(datosB2B.cantidadLicencias), // <--- Límite de puestos permitidos para la empresa
               currentActivations: 0,
               email: payerEmail || 'suscriptor_b2b@local',
               expiresAt
             });
 
             await nuevaLicenciaCorporativa.save();
+            console.log(`✅ [WEBHOOK B2B] Licencia corporativa creada para ${datosB2B.empresaNombre} -> Key: ${newLicenseKey} (${datosB2B.cantidadLicencias} puestos)`);
 
+            // 📧 ENVÍO DE CORREO CORPORATIVO VÍA BREVO PARA B2B
             if (payerEmail && payerEmail !== 'suscriptor_b2b@local') {
               const htmlB2B = `
                 <div style="font-family: Arial, sans-serif; padding: 25px; color: #333; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">
@@ -1569,13 +1589,16 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
                   <div style="background-color: #eff6ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 22px; font-weight: bold; color: #1e3a8a; letter-spacing: 2px; margin: 20px 0;">
                     ${newLicenseKey}
                   </div>
-                  <p>Comparta esta misma clave con los miembros de su equipo para que la activen simultáneamente.</p>
+                  <p>Comparta esta misma clave con los miembros de su equipo para que la activen simultáneamente en sus extensiones de Chrome.</p>
+                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                  <p style="font-size: 12px; color: #6b7280;">Soporte técnico prioritario incluido durante su suscripción activa.</p>
                 </div>
               `;
               await enviarCorreoBrevo(payerEmail, newLicenseKey, `Tu Licencia Corporativa B2B - ${datosB2B.empresaNombre} 🚀`, htmlB2B);
             }
 
           } else {
+            // 👤 CASO INDIVIDUAL (Tu código original intacto)
             let usuario = await License.findOne({ email: payerEmail });
 
             if (usuario) {
@@ -1583,6 +1606,7 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
               usuario.plan = 'Pro (Mercado Pago)';
               usuario.expiresAt = expiresAt;
               await usuario.save();
+              console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
             } else {
               const newLicenseKey = generateLicenseKey('PRES');
               await License.create({
@@ -1595,17 +1619,23 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
                 email: payerEmail || 'suscriptor_mercadopago@local',
                 expiresAt
               });
+              console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
               
+              // 📧 ENVÍO DE CORREO AUTOMÁTICO VÍA BREVO PARA NUEVOS SUSCRIPTORES
               if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
                 await enviarCorreoBrevo(payerEmail, newLicenseKey);
               }
             }
           }
-        } else if (status === 'paused' || status === 'cancelled') {
+        } 
+        
+        // 2. SI LA SUSCRIPCIÓN SE PAUSÓ O CANCELÓ (FALTA DE PAGO)
+        else if (status === 'paused' || status === 'cancelled') {
           await License.updateMany(
             { email: payerEmail },
             { $set: { status: 'inactive' } }
           );
+          console.log(`❌ Suscripción pausada/cancelada por impago para: ${payerEmail}. Acceso bloqueado.`);
         }
       }
     }
@@ -1617,14 +1647,14 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
   }
 });
 
-// ==========================================
-// ENDPOINT: Validar Licencia GET
-// ==========================================
 app.get('/api/validar-licencia', async (req, res) => {
   try {
     const rawLicenseKey = req.headers['x-user-license'];
     const licenseKey = rawLicenseKey ? rawLicenseKey.trim() : '';
 
+    // ------------------------------------------------------------------
+    // ⚡ MODO PRUEBAS: Devuelve el mismo estado de un usuario Pro
+    // ------------------------------------------------------------------
     if (licenseKey === DEV_MASTER_KEY) {
       return res.json({ 
         activo: true, 
@@ -1634,6 +1664,7 @@ app.get('/api/validar-licencia', async (req, res) => {
         incluyeAudio: true
       });
     }
+    // ------------------------------------------------------------------
 
     if (!licenseKey || licenseKey === 'TRIAL_KEY') {
       return res.status(401).json({ 
@@ -1677,7 +1708,7 @@ app.get('/api/validar-licencia', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT: Resumir Chat
+// ENDPOINT 3: Resumir Historial de Chat
 // ==========================================
 app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
   try {
@@ -1717,25 +1748,15 @@ app.post('/api/resumir-chat', validarLicencia, async (req, res) => {
   }
 });
 
-// Ruta de verificación de estado
+// Endpoint de verificación de estado
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'WhatsApp AI Universal Copilot Backend (MongoDB, Mercado Pago & Brevo)' });
 });
 
-// Inicialización del Servidor y Webhook de Telegram
+// Inicialización del Servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`\n==================================================`);
   console.log(`🚀 Servidor AI Copilot corriendo en puerto ${PORT}`);
   console.log(`==================================================\n`);
-
-  if (TELEGRAM_TOKEN && RENDER_URL) {
-    try {
-      const webhookUrl = `${RENDER_URL}/bot${TELEGRAM_TOKEN}`;
-      await bot.setWebHook(webhookUrl);
-      console.log(`✅ Webhook de Telegram configurado exitosamente en: ${webhookUrl}`);
-    } catch (error) {
-      console.error("❌ Error al configurar el webhook de Telegram:", error.message);
-    }
-  }
 });
