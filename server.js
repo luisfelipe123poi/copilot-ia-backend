@@ -14,7 +14,7 @@ import { MercadoPagoConfig, PreApproval } from 'mercadopago';
 dotenv.config();
 
 const TelegramBot = require('node-telegram-bot-api');
-const express = require('express');
+
 
 // 1. Tomamos las credenciales de las variables de entorno de Render
 const TOKEN = process.env.TELEGRAM_TOKEN;
