@@ -26,6 +26,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
+// Token del bot (definido para evitar ReferenceError en las rutas)
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TOKEN || '';
+
 // 1. Conexión a MongoDB (Permanente para Producción)
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/copilot-ai';
 mongoose.connect(MONGODB_URI)
