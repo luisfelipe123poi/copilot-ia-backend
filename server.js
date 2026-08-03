@@ -25,11 +25,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(cors());
 app.use(express.json());
 
-// 1. Conexión a MongoDB (Permanente para Producción)
+// Asegúrate de declarar la variable leyendo de process.env
+const MONGODB_URI = process.env.MONGODB_URI;
+
+// Ahora sí, conéctate usando la variable correctamente definida
 mongoose.connect(MONGODB_URI)
   .then(() => {
       console.log('✅ Conectado exitosamente a MongoDB Atlas');
-      iniciarEscuchaNuevosLeads(); // <-- Agrega esta línea aquí
+      iniciarEscuchaNuevosLeads();
   })
   .catch(err => console.error('❌ Error conectando a MongoDB:', err));
 
