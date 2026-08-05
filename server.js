@@ -1305,7 +1305,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
 
     // Enviar correo automático comercial con Brevo
     try {
-      const logoUrl = process.env.LOGO_URL || 'https://via.placeholder.com/180x50?text=Copilot.ai'; // URL pública de tu logo PNG/SVG
+      const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk'; // URL pública de tu logo PNG/SVG
       
       const htmlContenido = `
         <!DOCTYPE html>
