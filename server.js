@@ -10,6 +10,10 @@ import crypto from 'crypto';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import { MercadoPagoConfig, PreApproval } from 'mercadopago';
+import cron from 'node-cron';
+import axios from 'axios';
+import 'dotenv/config';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
 
@@ -87,10 +91,7 @@ Ofrecemos atención de alta calidad, acompañamiento continuo y facilidades de a
 `;
 
 const USAGE_LIMIT_FREE_TRIAL = 1;
-import cron from 'node-cron';
-import axios from 'axios';
-import 'dotenv/config';
-import nodemailer from 'nodemailer';
+
 
 // ... (Aquí van todas tus rutas y endpoints actuales) ...
 
