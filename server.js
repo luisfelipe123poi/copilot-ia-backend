@@ -206,18 +206,97 @@ app.post('/api/generar-prueba', async (req, res) => {
     await nuevaLicencia.save();
 
     // 5. Enviar el correo con la clave de prueba
+    const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk';
+
     const htmlContenido = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
-            <h2 style="color: #28a745;">¡Bienvenido a Copilot.ai! 🚀</h2>
-            <p>Has solicitado tu prueba gratuita de 300 respuestas.</p>
-            <p>Tu clave de activación única es:</p>
-            <div style="background-color: #e8f5e9; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #2e7d32; letter-spacing: 2px; margin: 20px 0;">
-              ${licenseKey}
-            </div>
-            <p>Copia y pega esta clave en la extensión de Chrome para activar tu cuenta de prueba.</p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-            <p style="font-size: 12px; color: #6b7280;">Al agotar tus respuestas, podrás adquirir un plan Pro para seguir disfrutando del servicio.</p>
-        </div>
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+          
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+            <tr>
+              <td align="center">
+                
+                <!-- Contenedor Principal -->
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                  
+                  <!-- HEADER / CABECERA CON LOGO -->
+                  <tr>
+                    <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
+                      <img src="${logoUrl}" alt="Copilot.ai" width="350" style="display: block; border: 0; max-width: 90%; height: auto;">
+                    </td>
+                  </tr>
+
+                  <!-- BANNER PRUEBA GRATUITA -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
+                      <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">¡Bienvenido a Copilot.ai! 🚀</h1>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.95;">Tu acceso de prueba gratuita de 300 respuestas ha sido activado</p>
+                    </td>
+                  </tr>
+
+                  <!-- CUERPO DE MENSAJE -->
+                  <tr>
+                    <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                      <p style="margin-top: 0;">Hola,</p>
+                      
+                      <p>Gracias por registrarte para probar nuestra tecnología. Hemos generado una credencial de acceso para que experimentes la automatización de Copilot.ai directamente en tu navegador.</p>
+                      
+                      <p>A continuación, te proporcionamos tu clave de activación única:</p>
+
+                      <!-- TARJETA DE LICENCIA -->
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 25px 0;">
+                        <tr>
+                          <td style="padding: 20px; text-align: center;">
+                            <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Tu Clave de Prueba Gratuita</span>
+                            <div style="background-color: #ffffff; border: 2px dashed #10b981; border-radius: 6px; padding: 12px 20px; font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: bold; color: #047857; letter-spacing: 3px; margin: 12px 0;">
+                              ${licenseKey}
+                            </div>
+                            <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
+                              <span>⚡ <strong>Incluye:</strong> 300 Respuestas automatizadas</span> &nbsp;|&nbsp; 
+                              <span>⏳ <strong>Vigilancia:</strong> 30 días de vigencia</span>
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- INSTRUCCIONES DE USO -->
+                      <h3 style="color: #0f172a; font-size: 16px; margin-top: 25px; margin-bottom: 10px;">¿Cómo empezar?</h3>
+                      <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.8;">
+                        <li>Abre tu extensión de <strong>Copilot.ai</strong> en Google Chrome.</li>
+                        <li>Ve a la sección de <strong>Configuración / Licencia</strong>.</li>
+                        <li>Ingresa la clave <strong>${licenseKey}</strong> y haz clic en <strong>Activar Licencia</strong>.</li>
+                      </ol>
+
+                      <p style="margin-top: 25px; font-size: 14px; color: #64748b;">Una vez agotado tu cupo de respuestas de prueba, podrás actualizar a un plan Pro o B2B para mantener el servicio sin interrupciones.</p>
+                    </td>
+                  </tr>
+
+                  <!-- FOOTER CORPORATIVO -->
+                  <tr>
+                    <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 25px 30px; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.5;">
+                      <p style="margin: 0 0 10px 0; font-weight: 600; color: #64748b;">Copilot.ai Software & Technology</p>
+                      <p style="margin: 0 0 10px 0;">
+                        <a href="https://tudominio.com" style="color: #10b981; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
+                        <a href="https://tudominio.com/soporte" style="color: #10b981; text-decoration: none; margin: 0 8px;">Centro de Ayuda</a> |
+                        <a href="https://tudominio.com/privacidad" style="color: #10b981; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
+                      </p>
+                      <p style="margin: 0; font-size: 11px;">Mensaje automático enviado a ${email}. Conserve este correo para la activación de su acceso de prueba.</p>
+                    </td>
+                  </tr>
+
+                </table>
+
+              </td>
+            </tr>
+          </table>
+
+        </body>
+        </html>
     `;
 
     await enviarCorreoBrevo(email, licenseKey, 'Tu clave de prueba gratuita para Copilot.ai 🎁', htmlContenido);
