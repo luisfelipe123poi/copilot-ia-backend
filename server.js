@@ -104,13 +104,26 @@ function generateLicenseKey(prefix = 'PRES') {
 }
 
 // ==========================================
-// FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API
+// FUNCIÓN AUXILIAR: Enviar Correo vía Brevo API (Acepta 1 o varios destinatarios)
 // ==========================================
-async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀', contenidoHtml = null) {
+async function enviarCorreoBrevo(destinatarios, licenseKey, asunto = '¡Tu suscripción está activa! Aquí tienes tu Licencia Pro 🚀', contenidoHtml = null) {
   const brevoApiKey = process.env.BREVO_API_KEY;
   
   if (!brevoApiKey) {
     console.warn('⚠️ No se encontró la variable BREVO_API_KEY en el archivo .env. El correo no pudo enviarse.');
+    return;
+  }
+
+  // Normalizar destinatarios: Si viene un solo string, lo convierte en Array
+  const emailsArray = Array.isArray(destinatarios) ? destinatarios : [destinatarios];
+  
+  // Limpiar y estructurar lista para Brevo
+  const toList = emailsArray
+    .filter(email => email && !email.includes('@local')) // Filtrar correos ficticios
+    .map(email => ({ email: email.trim() }));
+
+  if (toList.length === 0) {
+    console.warn('⚠️ No hay correos válidos en la lista de destinatarios.');
     return;
   }
 
@@ -132,13 +145,9 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
   const payload = {
     sender: {
       name: process.env.BREVO_SENDER_NAME || 'AI Sales Copilot',
-      email: process.env.BREVO_SENDER_EMAIL || 'copilot.ia@prestigecloser.com' // <-- Sustitúyelo aquí
+      email: process.env.BREVO_SENDER_EMAIL || 'copilot.ia@prestigecloser.com'
     },
-    to: [
-      {
-        email: destinatarioEmail
-      }
-    ],
+    to: toList,
     subject: asunto,
     htmlContent: htmlFinal
   };
@@ -159,7 +168,7 @@ async function enviarCorreoBrevo(destinatarioEmail, licenseKey, asunto = '¡Tu s
       throw new Error(errorData.message || 'Error al enviar correo mediante Brevo');
     }
 
-    console.log(`📧 Correo de licencia enviado con éxito a través de Brevo para: ${destinatarioEmail}`);
+    console.log(`📧 Correo enviado con éxito a: ${toList.map(t => t.email).join(', ')}`);
   } catch (error) {
     console.error('❌ Error al enviar correo con Brevo:', error.message);
   }
