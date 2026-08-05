@@ -852,16 +852,23 @@ app.post('/api/admin/detalles-licencia', async (req, res) => {
     try {
         const { adminSecret, email, licenseKey } = req.body;
 
-        if (adminSecret !== process.env.ADMIN_SECRET) {
+        // Validar credenciales de administrador con fallback
+        if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
             return res.status(401).json({ success: false, error: 'No autorizado.' });
         }
 
-        if (!email && !licenseKey) {
+        // Sanitización previa para evitar errores de tipo (TypeError en trim())
+        const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : null;
+        const cleanKey = typeof licenseKey === 'string' ? licenseKey.trim() : null;
+
+        if (!cleanEmail && !cleanKey) {
             return res.status(400).json({ success: false, error: 'Debes proporcionar un correo o una clave de licencia.' });
         }
 
-        const query = email ? { email: email.trim().toLowerCase() } : { licenseKey: licenseKey.trim() };
-        const licencia = await License.findOne(query);
+        const query = cleanEmail ? { email: cleanEmail } : { licenseKey: cleanKey };
+        
+        // Uso de .lean() para mejorar el rendimiento y simplificar el objeto JS plano
+        const licencia = await License.findOne(query).lean();
 
         if (!licencia) {
             return res.status(404).json({ success: false, error: 'No se encontró ninguna licencia con los datos proporcionados.' });
@@ -874,8 +881,8 @@ app.post('/api/admin/detalles-licencia', async (req, res) => {
                 licenseKey: licencia.licenseKey || 'N/A',
                 status: licencia.status || 'N/A',
                 plan: licencia.plan || 'N/A',
-                fechaInicio: licencia.createdAt || 'N/A',
-                fechaFin: licencia.expiresAt || 'N/A',
+                fechaInicio: licencia.createdAt || licencia.fechaInicio || 'N/A',
+                fechaFin: licencia.expiresAt || licencia.fechaFin || 'N/A',
                 activacionesActuales: licencia.activationsCount || 0,
                 maxActivations: licencia.maxActivations || 0,
                 cobrosRealizados: licencia.paymentCount || licencia.cobrosLlevados || 0,
@@ -1231,32 +1238,37 @@ app.post('/api/admin/listar-cuentas-free', async (req, res) => {
     }
 });
 
-// Endpoint para listar todas las licencias del sistema (Panel de Administrador)
+// ==========================================
+// ENDPOINT: Listar Todas las Licencias del Sistema (Panel Admin)
+// ==========================================
 app.post('/api/admin/listar-todas-licencias', async (req, res) => {
     try {
         const { adminSecret } = req.body;
 
         // Validar contraseña de administrador del backend
-        if (adminSecret !== process.env.ADMIN_SECRET) {
+        if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
             return res.status(401).json({ success: false, error: "No autorizado. Admin Secret incorrecto." });
         }
 
-        // ⚠️ CAMBIA 'Licencia' por el nombre de tu modelo/tabla en la base de datos
-        // (ej: License, User, etc., dependiendo de cómo guardes las licencias)
-        const licencias = await Licencia.find({}).lean();
+        // Consultar la colección usando el modelo correcto 'License'
+        const licencias = await License.find({}).lean();
 
-        // Opcional: Mapear los campos para asegurar que el frontend los reciba con los nombres correctos
+        // Mapear los campos alineados con la estructura de la base de datos MongoDB
         const licenciasFormateadas = licencias.map(lic => ({
             email: lic.email || lic.correo || "N/A",
             licenseKey: lic.licenseKey || lic.key || "N/A",
             status: lic.status || lic.estado || "N/A",
             plan: lic.plan || lic.tipo || "N/A",
-            fechaFin: lic.fechaFin || lic.fechaVencimiento || "N/A",
-            fechaInicio: lic.fechaInicio || "N/A"
+            fechaFin: lic.expiresAt || lic.fechaFin || lic.fechaVencimiento || "N/A",
+            fechaInicio: lic.createdAt || lic.fechaInicio || "N/A",
+            tokensUsados: lic.tokensUsados !== undefined ? lic.tokensUsados : (lic.usageCount || 0),
+            limiteTokens: lic.limiteTokens || 0,
+            preapprovalId: lic.preapprovalId || "N/A"
         }));
 
         return res.status(200).json({
             success: true,
+            total: licenciasFormateadas.length,
             licencias: licenciasFormateadas
         });
 
