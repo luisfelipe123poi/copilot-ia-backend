@@ -2050,13 +2050,11 @@ cron.schedule('0 8 * * *', async () => {
   }
 });
 
-// 2. Iniciar el servidor
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
-});
-
-// Inicialización del Servidor
+// ==========================================
+// INICIALIZACIÓN DEL SERVIDOR
+// ==========================================
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log(`\n==================================================`);
   console.log(`🚀 Servidor AI Copilot corriendo en puerto ${PORT}`);
