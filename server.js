@@ -1305,8 +1305,8 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
 
     // Enviar correo automático comercial con Brevo
     try {
-      const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk'; // URL pública de tu logo PNG/SVG
-      
+      const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk'; 
+
       const htmlContenido = `
         <!DOCTYPE html>
         <html lang="es">
@@ -1323,10 +1323,10 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
                 <!-- Contenedor Principal -->
                 <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                   
-                  <!-- HEADER / CABECERA CON LOGO -->
+                  <!-- HEADER / CABECERA CON LOGO (Ancho ajustado a 350px para mantener proporción adecuada) -->
                   <tr>
-                    <td align="center" style="background-color: #0f172a; padding: 30px 20px;">
-                      <img src="${logoUrl}" alt="Copilot.ai" width="180" style="display: block; border: 0; max-width: 100%; height: auto;">
+                    <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
+                      <img src="${logoUrl}" alt="Copilot.ai" width="350" style="display: block; border: 0; max-width: 90%; height: auto;">
                     </td>
                   </tr>
 
@@ -1415,7 +1415,6 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
     return res.status(500).json({ success: false, error: error.message || 'Error interno del servidor.' });
   }
 });
-
 // ==========================================
 // NUEVO ENDPOINT: Transcribir Audio del Cliente (OpenAI Whisper)
 // ==========================================
