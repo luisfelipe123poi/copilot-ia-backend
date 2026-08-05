@@ -1305,7 +1305,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
 
     // Enviar correo automático comercial con Brevo
     try {
-      const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk'; 
+      const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GsKiVVUrS7E7pbXUv1PCb89RkyE_-wI5'; 
 
       const htmlContenido = `
         <!DOCTYPE html>
