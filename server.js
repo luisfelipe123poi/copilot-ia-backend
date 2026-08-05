@@ -1662,18 +1662,96 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
             // 📧 ENVÍO DE CORREO CORPORATIVO VÍA BREVO PARA B2B
             if (payerEmail && payerEmail !== 'suscriptor_b2b@local') {
+              const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk';
+
               const htmlB2B = `
-                <div style="font-family: Arial, sans-serif; padding: 25px; color: #333; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">
-                  <h2 style="color: #1e40af;">¡Suscripción Empresarial B2B Activada, ${datosB2B.empresaNombre}! 🏢</h2>
-                  <p>Hola, su pago recurrente corporativo se ha procesado con éxito.</p>
-                  <p>Su clave de licencia corporativa exclusiva para <strong>${datosB2B.cantidadLicencias} puestos de trabajo</strong> es:</p>
-                  <div style="background-color: #eff6ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 22px; font-weight: bold; color: #1e3a8a; letter-spacing: 2px; margin: 20px 0;">
-                    ${newLicenseKey}
-                  </div>
-                  <p>Comparta esta misma clave con los miembros de su equipo para que la activen simultáneamente en sus extensiones de Chrome.</p>
-                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
-                  <p style="font-size: 12px; color: #6b7280;">Soporte técnico prioritario incluido durante su suscripción activa.</p>
-                </div>
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                  <meta charset="UTF-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+                  
+                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+                    <tr>
+                      <td align="center">
+                        
+                        <!-- Contenedor Principal -->
+                        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                          
+                          <!-- HEADER / CABECERA CON LOGO -->
+                          <tr>
+                            <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
+                              <img src="${logoUrl}" alt="Copilot.ai" width="350" style="display: block; border: 0; max-width: 90%; height: auto;">
+                            </td>
+                          </tr>
+
+                          <!-- BANNER COMERCIAL -->
+                          <tr>
+                            <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
+                              <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Suscripción Empresarial B2B Activada 🏢</h1>
+                              <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Acceso corporativo asignado para <strong>${datosB2B.empresaNombre}</strong></p>
+                            </td>
+                          </tr>
+
+                          <!-- CUERPO DE MENSAJE -->
+                          <tr>
+                            <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                              <p style="margin-top: 0;">Estimado equipo de <strong>${datosB2B.empresaNombre}</strong>,</p>
+                              
+                              <p>Confirmamos que su pago de suscripción corporativa se ha procesado con éxito. Su licencia matriz se encuentra activa y lista para ser implementada en su equipo de trabajo.</p>
+                              
+                              <p>A continuación, encontrará la clave de licencia corporativa asignada para su organización:</p>
+
+                              <!-- TARJETA DE LICENCIA B2B -->
+                              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 25px 0;">
+                                <tr>
+                                  <td style="padding: 20px; text-align: center;">
+                                    <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Clave de Licencia Matriz B2B</span>
+                                    <div style="background-color: #ffffff; border: 2px dashed #2563eb; border-radius: 6px; padding: 12px 20px; font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: bold; color: #1e40af; letter-spacing: 3px; margin: 12px 0;">
+                                      ${newLicenseKey}
+                                    </div>
+                                    <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
+                                      <span>👥 <strong>Capacidad corporativa:</strong> ${datosB2B.cantidadLicencias} puestos de trabajo</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </table>
+
+                              <!-- INSTRUCCIONES DE DESPLIEGUE -->
+                              <h3 style="color: #0f172a; font-size: 16px; margin-top: 25px; margin-bottom: 10px;">¿Cómo desplegar esta licencia en su equipo?</h3>
+                              <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.8;">
+                                <li>Comparta la clave <strong>${newLicenseKey}</strong> con los miembros autorizados de su empresa.</li>
+                                <li>Cada usuario debe ingresar a la extensión en su navegador e ir a <strong>Configuración / Licencia</strong>.</li>
+                                <li>Al ingresar la clave, el sistema registrará la activación de forma automática hasta cubrir los <strong>${datosB2B.cantidadLicencias} puestos</strong> contratados.</li>
+                              </ol>
+
+                              <p style="margin-top: 25px; font-size: 14px; color: #64748b;">Su suscripción incluye soporte técnico prioritario durante todo el periodo activo. Si requiere asistencias adicionales o ampliar el número de licencias, puede contactarnos directamente respondiendo a este correo.</p>
+                            </td>
+                          </tr>
+
+                          <!-- FOOTER CORPORATIVO -->
+                          <tr>
+                            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 25px 30px; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.5;">
+                              <p style="margin: 0 0 10px 0; font-weight: 600; color: #64748b;">Copilot.ai Enterprise Solutions</p>
+                              <p style="margin: 0 0 10px 0;">
+                                <a href="https://tudominio.com" style="color: #2563eb; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
+                                <a href="https://tudominio.com/soporte" style="color: #2563eb; text-decoration: none; margin: 0 8px;">Soporte Empresarial</a> |
+                                <a href="https://tudominio.com/privacidad" style="color: #2563eb; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
+                              </p>
+                              <p style="margin: 0; font-size: 11px;">Mensaje automático enviado a ${payerEmail}. Conserve este comprobante para referencias administrativas de su cuenta B2B.</p>
+                            </td>
+                          </tr>
+
+                        </table>
+
+                      </td>
+                    </tr>
+                  </table>
+
+                </body>
+                </html>
               `;
               await enviarCorreoBrevo(payerEmail, newLicenseKey, `Tu Licencia Corporativa B2B - ${datosB2B.empresaNombre} 🚀`, htmlB2B);
             }
