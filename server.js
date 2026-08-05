@@ -176,51 +176,7 @@ async function enviarCorreoBrevo(destinatarios, licenseKey, asunto = '¡Tu suscr
   }
 }
 
-// ==========================================
-// TAREA PROGRAMADA: Avisar 3 días antes de la renovación
-// ==========================================
-cron.schedule('0 8 * * *', async () => {
-  console.log('⏰ Ejecutando revisión de suscripciones próximas a vencer...');
-  try {
-    const hoy = new Date();
-    const tresDiasDespues = new Date();
-    tresDiasDespues.setDate(hoy.getDate() + 3);
 
-    const inicioDia = new Date(tresDiasDespues.setHours(0, 0, 0, 0));
-    const finDia = new Date(tresDiasDespues.setHours(23, 59, 59, 999));
-
-    const licenciasPorVencer = await License.find({
-      expiresAt: { $gte: inicioDia, $lte: finDia },
-      status: 'active'
-    });
-
-    for (const licencia of licenciasPorVencer) {
-      if (licencia.email && !licencia.email.includes('@local')) {
-        const htmlAviso = `
-          <h2>Tu suscripción vence en 3 días ⏳</h2>
-          <p>Hola,</p>
-          <p>Te recordamos que tu suscripción para la clave de licencia <strong>${licencia.licenseKey}</strong> se renovará el <strong>${licencia.expiresAt.toLocaleDateString()}</strong>.</p>
-          <p>Asegúrate de contar con fondos disponibles en tu tarjeta/método de pago para mantener el servicio activo sin interrupciones.</p>
-        `;
-
-        await enviarCorreoBrevo(
-          licencia.email, 
-          licencia.licenseKey, 
-          '⏳ Tu suscripción está próxima a renovarse (3 días)', 
-          htmlAviso
-        );
-        console.log(`📧 Recordatorio enviado a: ${licencia.email}`);
-      }
-    }
-  } catch (error) {
-    console.error('❌ Error enviando recordatorios de renovación:', error.message);
-  }
-});
-
-// 2. Iniciar el servidor
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
-});
 
 // ==========================================
 // ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
