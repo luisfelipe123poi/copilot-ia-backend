@@ -1270,7 +1270,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
   console.log('📦 [BACKEND] Body recibido:', req.body);
 
   try {
-    const { email, durationDays, maxActivations, adminSecret } = req.body;
+    const { nombreBeneficiario, email, durationDays, maxActivations, adminSecret } = req.body;
 
     // Validar contraseña de administrador
     if (adminSecret !== (process.env.ADMIN_SECRET || 'mi_clave_secreta_super_segura_2026')) {
@@ -1278,9 +1278,9 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
       return res.status(403).json({ success: false, error: 'No autorizado. Admin secret incorrecto.' });
     }
 
-    if (!email || !durationDays || !maxActivations) {
+    if (!nombreBeneficiario || !email || !durationDays || !maxActivations) {
       console.warn('❌ [BACKEND] Faltan parámetros en la petición.');
-      return res.status(400).json({ success: false, error: 'Faltan parámetros (email, durationDays, maxActivations).' });
+      return res.status(400).json({ success: false, error: 'Faltan parámetros (nombreBeneficiario, email, durationDays, maxActivations).' });
     }
 
     const licenseKey = generateLicenseKey('FB');
@@ -1289,6 +1289,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
 
     const nuevaLicencia = new License({
       licenseKey,
+      nombreBeneficiario,
       email,
       status: 'active',
       durationDays: Number(durationDays),
@@ -1300,23 +1301,104 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
     });
 
     await nuevaLicencia.save();
-    console.log(`✅ [BACKEND] Licencia creada y guardada en MongoDB: ${licenseKey} para ${email}`);
+    console.log(`✅ [BACKEND] Licencia creada y guardada en MongoDB: ${licenseKey} para ${nombreBeneficiario} (${email})`);
 
-    // Enviar correo automático con Brevo
+    // Enviar correo automático comercial con Brevo
     try {
+      const logoUrl = process.env.LOGO_URL || 'https://via.placeholder.com/180x50?text=Copilot.ai'; // URL pública de tu logo PNG/SVG
+      
       const htmlContenido = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; border-radius: 8px;">
-          <h2 style="color: #4f46e5;">¡Acceso Exclusivo de Feedback - Copilot.ai! 🚀</h2>
-          <p>Hola,</p>
-          <p>Te hemos seleccionado para probar en primicia nuestra extensión y ayudarnos con tu feedback estratégico.</p>
-          <p>Tu clave de acceso (${durationDays} días, hasta ${maxActivations} cuentas) es:</p>
-          <div style="background-color: #e0e7ff; padding: 15px; border-radius: 6px; text-align: center; font-size: 20px; font-weight: bold; color: #3730a3; letter-spacing: 2px; margin: 20px 0;">
-            ${licenseKey}
-          </div>
-          <p>Copia esta clave y pégala en la configuración de tu extensión.</p>
-        </div>
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-font-smoothing: antialiased;">
+          
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+            <tr>
+              <td align="center">
+                
+                <!-- Contenedor Principal -->
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                  
+                  <!-- HEADER / CABECERA CON LOGO -->
+                  <tr>
+                    <td align="center" style="background-color: #0f172a; padding: 30px 20px;">
+                      <img src="${logoUrl}" alt="Copilot.ai" width="180" style="display: block; border: 0; max-width: 100%; height: auto;">
+                    </td>
+                  </tr>
+
+                  <!-- BANNER COMERCIAL -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
+                      <h1 style="margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">Acceso Exclusivo al Programa Feedback 🚀</h1>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Forma parte de la experiencia de validación estratégica de Copilot.ai</p>
+                    </td>
+                  </tr>
+
+                  <!-- CUERPO DE MENSAJE -->
+                  <tr>
+                    <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                      <p style="margin-top: 0;">Estimado/a <strong>${nombreBeneficiario}</strong>,</p>
+                      
+                      <p>Nos complace darte la bienvenida a nuestro grupo de testers y aliados estratégicos. Has sido seleccionado/a para acceder a una versión VIP de nuestra plataforma para probar las últimas funciones automatizadas.</p>
+                      
+                      <p>A continuación, te proporcionamos tu credencial de acceso para activar tu extensión:</p>
+
+                      <!-- TARJETA DE LICENCIA -->
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 25px 0;">
+                        <tr>
+                          <td style="padding: 20px; text-align: center;">
+                            <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Tu Clave de Licencia Exclusiva</span>
+                            <div style="background-color: #ffffff; border: 2px dashed #6366f1; border-radius: 6px; padding: 12px 20px; font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: bold; color: #4338ca; letter-spacing: 3px; margin: 12px 0;">
+                              ${licenseKey}
+                            </div>
+                            <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
+                              <span>⏳ <strong>Duración:</strong> ${durationDays} días</span> &nbsp;|&nbsp; 
+                              <span>👥 <strong>Cuentas permitidas:</strong> ${maxActivations}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <!-- INSTRUCCIONES DE USO -->
+                      <h3 style="color: #0f172a; font-size: 16px; margin-top: 25px; margin-bottom: 10px;">¿Cómo activar tu clave?</h3>
+                      <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.8;">
+                        <li>Abre tu extensión en Google Chrome / Navegador.</li>
+                        <li>Ingresa a la sección de <strong>Configuración / Licencia</strong>.</li>
+                        <li>Pega la clave asignada arriba y haz clic en <strong>Activar Licencia</strong>.</li>
+                      </ol>
+
+                      <p style="margin-top: 25px; font-size: 14px; color: #64748b;">Tu retroalimentación es fundamental para optimizar nuestros algoritmos. Si detectas cualquier oportunidad de mejora, puedes escribirnos directamente respondiendo a este correo.</p>
+                    </td>
+                  </tr>
+
+                  <!-- FOOTER CORPORATIVO -->
+                  <tr>
+                    <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 25px 30px; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.5;">
+                      <p style="margin: 0 0 10px 0; font-weight: 600; color: #64748b;">Copilot.ai Software & Technology</p>
+                      <p style="margin: 0 0 10px 0;">
+                        <a href="https://tudominio.com" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
+                        <a href="https://tudominio.com/soporte" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Soporte Técnico</a> |
+                        <a href="https://tudominio.com/privacidad" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
+                      </p>
+                      <p style="margin: 0; font-size: 11px;">Este es un mensaje automático enviado a ${email}. Por favor, conserva este correo para futuras referencias de tu licencia.</p>
+                    </td>
+                  </tr>
+
+                </table>
+
+              </td>
+            </tr>
+          </table>
+
+        </body>
+        </html>
       `;
-      await enviarCorreoBrevo(email, licenseKey, 'Tu acceso exclusivo de feedback 🎁', htmlContenido);
+
+      await enviarCorreoBrevo(email, licenseKey, 'Bienvenido al Programa Exclusivo de Feedback - Copilot.ai 🎁', htmlContenido);
     } catch (mailErr) {
       console.warn('⚠️ [BACKEND] La licencia se creó pero falló el envío de correo:', mailErr.message);
     }
@@ -1325,7 +1407,7 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
       success: true, 
       message: 'Licencia de feedback creada con éxito.', 
       licenseKey,
-      details: { durationDays, maxActivations, expiresAt }
+      details: { nombreBeneficiario, durationDays, maxActivations, expiresAt }
     });
 
   } catch (error) {
