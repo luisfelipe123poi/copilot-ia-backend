@@ -180,7 +180,7 @@ async function enviarCorreoBrevo(destinatarios, licenseKey, asunto = '¡Tu suscr
 
 
 // ==========================================
-// ENDPOINT NUEVO: Generar Prueba Gratuita por Correo
+// ENDPOINT: Generar Prueba Gratuita por Correo
 // ==========================================
 app.post('/api/generar-prueba', async (req, res) => {
   try {
@@ -191,7 +191,7 @@ app.post('/api/generar-prueba', async (req, res) => {
     }
 
     // 1. Verificar si el correo ya pidió su prueba o tiene una licencia
-    const licenciaExistente = await License.findOne({ email });
+    const licenciaExistente = await License.findOne({ email: email.trim().toLowerCase() });
     if (licenciaExistente) {
       return res.status(400).json({ 
         success: false, 
@@ -202,17 +202,17 @@ app.post('/api/generar-prueba', async (req, res) => {
     // 2. Generar la clave de prueba gratuita
     const licenseKey = generateLicenseKey('FREE');
 
-    // 3. Definir expiración (ej. 30 días o tiempo ilimitado hasta agotar tokens)
+    // 3. Definir expiración (30 días de vigencia)
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
     // 4. Guardar en MongoDB con el límite de 300 respuestas
     const nuevaLicencia = new License({
-      email: email,
+      email: email.trim().toLowerCase(),
       licenseKey: licenseKey,
       status: 'trial',
       plan: 'Prueba Gratuita',
-      limiteTokens: 1,
+      limiteTokens: 300, // Ajustado a 300 respuestas de límite
       tokensUsados: 0,
       usageCount: 0,
       expiresAt: expiresAt
@@ -258,7 +258,7 @@ app.post('/api/generar-prueba', async (req, res) => {
                     <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
                       <p style="margin-top: 0;">Hola,</p>
                       
-                      <p>Gracias por registrarte para probar nuestra tecnología. Hemos generado una credencial de acceso para que experimentes la automatización de Copilot.ai directamente en tu navegador.</p>
+                      <p>Gracias por registrarte para probar nuestra tecnología. Hemos generado una credencial de acceso para que experimentes la automatización de Copilot.ai directamente en tu navegador (compatible con WebMail y Gmail).</p>
                       
                       <p>A continuación, te proporcionamos tu clave de activación única:</p>
 
@@ -272,7 +272,7 @@ app.post('/api/generar-prueba', async (req, res) => {
                             </div>
                             <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
                               <span>⚡ <strong>Incluye:</strong> 300 Respuestas automatizadas</span> &nbsp;|&nbsp; 
-                              <span>⏳ <strong>Vigilancia:</strong> 30 días de vigencia</span>
+                              <span>⏳ <strong>Vigencia:</strong> 30 días de uso</span>
                             </div>
                           </td>
                         </tr>
@@ -281,9 +281,10 @@ app.post('/api/generar-prueba', async (req, res) => {
                       <!-- INSTRUCCIONES DE USO -->
                       <h3 style="color: #0f172a; font-size: 16px; margin-top: 25px; margin-bottom: 10px;">¿Cómo empezar?</h3>
                       <ol style="margin: 0; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.8;">
-                        <li>Abre tu extensión de <strong>Copilot.ai</strong> en Google Chrome.</li>
-                        <li>Ve a la sección de <strong>Configuración / Licencia</strong>.</li>
-                        <li>Ingresa la clave <strong>${licenseKey}</strong> y haz clic en <strong>Activar Licencia</strong>.</li>
+                        <li>Abre la extensión <strong>Copilot.ai</strong> en tu navegador Chrome.</li>
+                        <li>Asegúrate de estar en tu panel de correo (Gmail o cliente compatible).</li>
+                        <li>Ingresa la clave <strong>${licenseKey}</strong> en el campo de licencia y haz clic en <strong>Activar</strong>.</li>
+                        <li>¡Guarda la configuración para que la extensión sincronice las respuestas en vivo!</li>
                       </ol>
 
                       <p style="margin-top: 25px; font-size: 14px; color: #64748b;">Una vez agotado tu cupo de respuestas de prueba, podrás actualizar a un plan Pro o B2B para mantener el servicio sin interrupciones.</p>
@@ -295,9 +296,9 @@ app.post('/api/generar-prueba', async (req, res) => {
                     <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 25px 30px; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.5;">
                       <p style="margin: 0 0 10px 0; font-weight: 600; color: #64748b;">Copilot.ai Software & Technology</p>
                       <p style="margin: 0 0 10px 0;">
-                        <a href="https://tudominio.com" style="color: #10b981; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
-                        <a href="https://tudominio.com/soporte" style="color: #10b981; text-decoration: none; margin: 0 8px;">Centro de Ayuda</a> |
-                        <a href="https://tudominio.com/privacidad" style="color: #10b981; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
+                        <a href="https://copilot.prestigecloser.com/" style="color: #10b981; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
+                        <a href="https://copilot.prestigecloser.com/soporte" style="color: #10b981; text-decoration: none; margin: 0 8px;">Centro de Ayuda</a> |
+                        <a href="https://copilot.prestigecloser.com/privacidad" style="color: #10b981; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
                       </p>
                       <p style="margin: 0; font-size: 11px;">Mensaje automático enviado a ${email}. Conserve este correo para la activación de su acceso de prueba.</p>
                     </td>
@@ -315,7 +316,7 @@ app.post('/api/generar-prueba', async (req, res) => {
 
     await enviarCorreoBrevo(email, licenseKey, 'Tu clave de prueba gratuita para Copilot.ai 🎁', htmlContenido);
 
-    return res.json({ 
+    return res.status(200).json({ 
       success: true, 
       message: '¡Prueba creada! Revisa tu correo para obtener tu clave.' 
     });
@@ -474,48 +475,115 @@ app.post('/api/admin/crear-checkout-b2b', async (req, res) => {
   }
 });
 // ==========================================
-// ENDPOINT NUEVO: Generador de System Prompt Personalizado (Meta-Prompt)
+// ENDPOINT: Generador de System Prompt Personalizado (Meta-Prompt)
 // ==========================================
 app.post('/api/generar-system-prompt', async (req, res) => {
   try {
+    const licenseKey = req.headers['x-user-license'];
     const { descripcionNegocio, objetivoBot } = req.body;
 
-    if (!descripcionNegocio) {
-      return res.status(400).json({ error: 'La descripción del negocio es requerida.' });
+    // 1. Validar presencia de clave de licencia
+    if (!licenseKey) {
+      return res.status(401).json({ 
+        ok: false, 
+        error: 'No se proporcionó una clave de licencia en los encabezados.' 
+      });
     }
 
+    // 2. Buscar y verificar la licencia en la base de datos
+    const licencia = await License.findOne({ licenseKey: licenseKey.trim() });
+    
+    // Si no existe o se requiere validación por defecto para entorno TRIAL_KEY sin DB
+    if (!licencia && licenseKey !== 'TRIAL_KEY') {
+      return res.status(401).json({ 
+        ok: false, 
+        error: 'La clave de licencia proporcionada es inválida o no existe.' 
+      });
+    }
+
+    // 3. Verificación de vigencia y estado de la suscripción/prueba
+    if (licencia) {
+      const ahora = new Date();
+      if (licencia.status === 'expired' || (licencia.expiresAt && licencia.expiresAt < ahora)) {
+        return res.status(403).json({
+          ok: false,
+          code: 'SUBSCRIPTION_EXPIRED',
+          error: 'Tu suscripción o periodo de prueba ha expirado. Renueva tu licencia para continuar.'
+        });
+      }
+
+      if (licencia.status === 'inactive') {
+        return res.status(403).json({
+          ok: false,
+          code: 'SUBSCRIPTION_INACTIVE',
+          error: 'Tu licencia se encuentra inactiva o presenta un error de pago.'
+        });
+      }
+    }
+
+    // 4. Si la petición es exclusivamente para prueba o activación rápida desde la extensión
+    if (objetivoBot === 'Test' || descripcionNegocio === 'Validación de licencia') {
+      return res.status(200).json({
+        ok: true,
+        message: 'Licencia activa y verificada con éxito.'
+      });
+    }
+
+    // 5. Validar datos mínimos obligatorios para sintetizar el prompt
+    if (!descripcionNegocio) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'La descripción del negocio es requerida para generar el System Prompt.' 
+      });
+    }
+
+    // 6. Construcción del Meta-Prompt adaptado a la Extensión (Gmail & WebMail Automation)
     const systemPromptMeta = `
-      Escribe un experto Prompt Engineer especialista en arquitectura de IA para asistentes conversacionales y venta directa por WhatsApp.
+      Escribe un experto Prompt Engineer especialista en arquitectura de IA para asistentes conversacionales y venta directa multicanal (Gmail, WebMail y Soporte).
       
       OBJETIVO:
-      Crear una instrucción de sistema (System Prompt) estructurada, profesional y altamente efectiva para entrenar al chatbot de WhatsApp de este cliente.
+      Crear una instrucción de sistema (System Prompt) estructurada, profesional y altamente efectiva para entrenar el asistente conversacional de este cliente.
 
       DATOS DEL CLIENTE:
-      - Descripción del Negocio / Servicio: "${descripcionNegocio}"
-      - Objetivo Principal del Bot: "${objetivoBot || 'Atender clientes, resolver dudas y concretar ventas o citas.'}"
+      - Descripción del Negocio / Servicio / Precios / Reglas: "${descripcionNegocio}"
+      - Objetivo Principal del Bot: "${objetivoBot || 'Atender clientes, resolver dudas con precisión y guiar expertamente hacia la conversión, venta o agendamiento.'}"
 
       INSTRUCCIONES DE SALIDA:
       Escribe un System Prompt claro, redactado en segunda persona ("Eres un..."). Debe definir:
-      1. El rol y personalidad del asistente.
-      2. Reglas de comunicación (brevedad para WhatsApp, emojis clave, tono).
-      3. Cómo guiar al cliente hacia el objetivo principal.
+      1. El rol, identidad y personalidad del asistente.
+      2. Reglas de comunicación adaptadas a correos y mensajes directos (tono empático, profesional, concisión y estructura escaneable).
+      3. Protocolos para responder preguntas frecuentes sobre servicios/precios y guiar al cliente al objetivo principal.
       
-      REGLA CRÍTICA: Devuelve ÚNICAMENTE el texto del System Prompt listo para usar, sin introducciones ni comentarios adicionales.
+      REGLA CRÍTICA: Devuelve ÚNICAMENTE el texto del System Prompt listo para usar, sin introducciones, saludos ni comentarios adicionales.
     `;
 
+    // 7. Llamada al modelo de IA
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: systemPromptMeta }],
       temperature: 0.7,
-      max_tokens: 350
+      max_tokens: 450
     });
 
     const promptGenerado = completion.choices[0].message.content.trim();
-    return res.json({ promptGenerado });
+
+    // 8. Incrementar conteo de uso en la base de datos si aplica
+    if (licencia) {
+      licencia.usageCount = (licencia.usageCount || 0) + 1;
+      await licencia.save();
+    }
+
+    return res.status(200).json({ 
+      ok: true, 
+      promptGenerado: promptGenerado 
+    });
 
   } catch (error) {
     console.error('Error en /api/generar-system-prompt:', error.message);
-    return res.status(500).json({ error: 'Error al generar la instrucción personalizada de IA.' });
+    return res.status(500).json({ 
+      ok: false, 
+      error: 'Error al generar la instrucción personalizada de IA.' 
+    });
   }
 });
 
