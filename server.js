@@ -674,7 +674,7 @@ app.post('/api/analizar-intencion', async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT 2: Generar Respuesta Universal (Con Mensajes Personalizados por Tipo de Licencia)
+// ENDPOINT 2: Generar Respuesta Universal (Adaptable a Instrucciones del Usuario)
 // ==========================================
 app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
@@ -711,7 +711,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       if (tipoLicencia === 'trial' && tokensUsados >= limiteTokens) {
         return res.status(403).json({
           code: 'TRIAL_EXPIRED',
-          error: 'Has consumido todos tus mensajes de prueba gratuita. Activa el Plan Starter o Pro para seguir automatizando tus ventas sin límites.'
+          error: 'Has consumido todos tus mensajes de prueba gratuita. Activa el Plan Starter o Pro para seguir automatizando tus respuestas sin límites.'
         });
       }
 
@@ -744,18 +744,18 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     if (tipoAccion === 'analizar_explicar') {
       let conversacionContexto = '';
       if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
-        conversacionContexto = `\nHISTORIAL RECIENTE DEL CHAT:\n` + historialChat.map(m => `- ${m.remitente.toUpperCase()}: ${m.texto}`).join('\n');
+        conversacionContexto = `\nHISTORIAL RECIENTE DEL CHAT:\n` + historialChat.map(m => `- ${(m.remitente || m.role || 'USUARIO').toUpperCase()}: ${m.texto || m.content}`).join('\n');
       }
 
       const promptExplicacion = `
-        Escribes un asistente analista de comunicación comercial.
-        Analiza el siguiente mensaje entrante y el contexto del chat.
+        Eres un asistente analista de comunicación.
+        Analiza el siguiente mensaje entrante y el contexto del correo/chat.
         
         OBJETIVO:
-        Explica en MÁXIMO 2 oraciones breves, claras y directas cuál es la intención real, la necesidad, la duda o el problema del cliente.
+        Explica en MÁXIMO 2 oraciones breves, claras y directas cuál es el tema principal, la intención o el contenido central del mensaje.
 
         ${conversacionContexto}
-        Mensaje actual del cliente: "${mensajeCliente}"
+        Mensaje o correo analizado: "${mensajeCliente}"
       `;
 
       const completionAnalisis = await openai.chat.completions.create({
@@ -768,95 +768,94 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       return res.json({ respuesta: completionAnalisis.choices[0].message.content.trim() });
     }
 
-    // 1. Configurar Comportamiento según Modo
+    // 1. EVALUACIÓN Y ADAPTACIÓN DEL ROL / MODO (Dinámico y Flexible)
     let reglaModo = '';
     switch (modoOperacion) {
       case 'soporte':
-        reglaModo = `
-          ROL: Especialista de Soporte Técnico.
-          OBJETIVO: Ayudar al usuario a resolver su problema técnico o duda operativa de forma paciente y resolutiva.
-        `;
+        reglaModo = `ROL Y OBJETIVO: Asistente de Soporte Técnico. Resuelve la duda u operativa planteada con claridad y paciencia.`;
         break;
 
       case 'informacion':
-        reglaModo = `
-          ROL: Asistente de Información General y FAQ.
-          OBJETIVO: Responder preguntas sobre servicios, horarios, requisitos y políticas con total claridad.
-        `;
+        reglaModo = `ROL Y OBJETIVO: Asistente Informativo. Brinda respuesta clara a preguntas sobre servicios, políticas o datos del negocio.`;
         break;
 
+      case 'simulador_respuesta_comercial':
+      case 'redaccion_desde_cero':
       case 'ventas':
       default:
         let instruccionAccion = '';
         if (tipoAccion === 'rebatir_precio') {
-          instruccionAccion = 'El cliente cuestiona el precio. Muestra empatía, resalta el valor percibido y propone un siguiente paso comercial.';
+          instruccionAccion = 'El cliente cuestiona el precio. Muestra empatía, resalta el valor y propone un siguiente paso.';
         } else {
-          instruccionAccion = 'Dirige al cliente hacia el cierre de venta, agendamiento de cita o el siguiente paso comercial.';
+          instruccionAccion = 'Si el mensaje es una consulta comercial o venta, orienta al usuario hacia el siguiente paso comercial sin sonar agresivo ni forzado.';
         }
 
         reglaModo = `
-          ROL: Especialista en Ventas y Cierre Comercial por WhatsApp.
-          OBJETIVO: ${instruccionAccion}
-          INSTRUCCIÓN EXTRA: Si el cliente ya confirmó una cita, aceptó el enlace o cerró la negociación, NO hagas más preguntas. Limítate a confirmar con un mensaje amable, directo y profesional (ej: "Perfecto, quedamos agendados. ¡Un saludo!"). Si la conversación sigue abierta, termina con un llamado a la acción directo.
+          ROL Y OBJETIVO: Asistente de Comunicación Comercial y Atención de Correos.
+          DIRECTIVA: ${instruccionAccion}
         `;
         break;
     }
 
-    // 2. Configurar Instrucciones de Tono
+    // 2. CONFIGURAR INSTRUCCIONES DE TONO
     let instruccionTono = '';
     switch (tono) {
       case 'empatico':
         instruccionTono = 'Usa un tono cálido, amable, comprensivo y cercano.';
         break;
       case 'urgencia':
-        instruccionTono = 'Agrega un sentido sutil de escasez o prioridad de atención.';
+        instruccionTono = 'Agrega un sentido sutil de prioridad de atención.';
         break;
       case 'persuasivo':
-        instruccionTono = 'Usa un tono altamente persuasivo y enfocado en beneficios de alto valor.';
+        instruccionTono = 'Usa un tono persuasivo y enfocado en destacar valor.';
         break;
       case 'breve':
         instruccionTono = 'Sé extremadamente breve, conciso y directo al grano.';
         break;
       case 'oferta':
-        instruccionTono = 'Enfócate en destacar la oferta especial, bonos o descuentos aplicables.';
+        instruccionTono = 'Enfócate en destacar beneficios, ofertas o facilidades.';
         break;
       case 'directo':
       default:
-        instruccionTono = 'Sé directo, profesional, claro y sin rodeos.';
+        instruccionTono = 'Sé directo, claro, profesional y fluido.';
         break;
     }
 
-    // 3. System Prompt Compuesto
-    const promptUsuarioCustom = promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0 
-      ? `INSTRUCCIONES DE COMPORTAMIENTO Y ENTRENAMIENTO PERSONALIZADO DEL CLIENTE:\n${promptEntrenamientoUsuario}`
-      : `INSTRUCCIONES DE COMPORTAMIENTO:\n${reglaModo}`;
+    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT NEUTRO Y TOTALMENTE CONTROLADO POR EL USUARIO
+    const directivaUsuario = (promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0)
+      ? promptEntrenamientoUsuario
+      : reglaModo;
 
-    const infoNegocio = contextoNegocio || CONTEXTO_NEGOCIO_DEFAULT;
+    const infoNegocio = contextoNegocio || (typeof CONTEXTO_NEGOCIO_DEFAULT !== 'undefined' ? CONTEXTO_NEGOCIO_DEFAULT : '');
 
     const systemPrompt = `
-      ${promptUsuarioCustom}
+Eres un asistente de correo e inteligencia artificial altamente inteligente, natural y adaptable.
 
-      CONTEXTO Y DATOS DEL NEGOCIO / OFERTA:
-      ${infoNegocio}
+TU DIRECTIVA PRINCIPAL Y REGLA DE ORO:
+1. Obedece ESTRICTAMENTE las órdenes, instrucciones y personalidad que el usuario te ha configurado en las "INSTRUCCIONES DEL USUARIO". Esa es tu prioridad absoluta.
+2. Analiza libremente el texto o correo recibido. NO intentes vender, forzar citas ni ofrecer servicios si el correo es una notificación automática, boletín masivo, circular informativa (ej. Rappi, bancos, etc.) o no tiene relación comercial, A MENOS que el usuario te lo ordene explícitamente.
+3. Si recibes un boletín o correo masivo informativo y no hay orden de venta, genera un resumen breve, un análisis o un acuse de recibido profesional según corresponda.
 
-      REGLAS DE FORMATO OBLIGATORIAS (ESTRICTO):
-      - Tono a aplicar: ${instruccionTono}
-      - Longitud: MÁXIMO 2 oraciones cortas. Ve al grano de inmediato.
-      - ESTRICTAMENTE PROHIBIDO usar fórmulas corporativas robóticas, frases acartonadas como "¡Un saludo!" al final, ni despedidas corporativas formales de call-center.
-      - Si la cita ya quedó confirmada, responde de forma relajada y casual (Ej: "Listo, nos vemos mañana a las 3 PM por acá. ¡Cualquier cosa me avisas!").
-      - Habla como un asesor experto de carne y hueso conversando por WhatsApp: cercano, fluido, natural y cero robótico.
-    `;
+INSTRUCCIONES DEL USUARIO (POPUP / CONFIGURACIÓN):
+${directivaUsuario}
 
-    // 4. Construir Mensajes para OpenAI mapeando CORRECTAMENTE roles user / assistant
+CONTEXTO Y DATOS DEL NEGOCIO / OFERTA:
+${infoNegocio || 'Sin datos adicionales de negocio.'}
+
+REGLAS DE FORMATO Y ESTILO:
+- Tono a aplicar: ${instruccionTono}
+- Estilo: Habla de forma natural, fluida y experta. Cero frases corporativas robóticas ni despedidas acartonadas de call-center.
+- Longitud: Mantén la respuesta directa y al grano.
+    `.trim();
+
+    // 4. CONSTRUIR MENSAJES PARA OPENAI MAPEANDO CORRECTAMENTE ROLES (user / assistant)
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
       historialChat.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
         
-        // CORRECCIÓN CRÍTICA DE ROLES: 
-        // Si el remitente es 'bot', 'assistant' o 'asesor', va como 'assistant'. 
-        // Todo lo demás (cliente, user, etc.) va como 'user'.
+        // Corrección de roles para historial
         const rolOpenAI = (remitente === 'bot' || remitente === 'assistant' || remitente === 'asesor') ? 'assistant' : 'user';
         
         mensajesChatOpenAI.push({
@@ -865,7 +864,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         });
       });
 
-      // Verificar si el último mensaje del historial ya coincide con el mensajeCliente actual
+      // Evitar duplicar el último mensaje si ya venía en el historial
       const ultimoMsgObj = historialChat[historialChat.length - 1];
       const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
       const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
@@ -891,13 +890,13 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: mensajesChatOpenAI,
-      temperature: 0.4, 
-      max_tokens: 220
+      temperature: 0.5, 
+      max_tokens: 300
     });
 
     const respuestaIA = completion.choices[0].message.content.trim();
 
-    // 🎯 INCREMENTO ÚNICO Y SEGURO DE CONTADOR EN TRIAL / PLANES
+    // 🎯 INCREMENTO DE CONTADOR DE TOKENS EN LA LICENCIA
     if (req.userLicenseDoc) {
       const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
       req.userLicenseDoc.tokensUsados = currentTokens + 1;
