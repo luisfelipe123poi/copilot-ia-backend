@@ -680,6 +680,8 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
   try {
     const { 
       mensajeCliente, 
+      instruccionAdicional,
+      destinatario,
       historialChat, 
       contextoNegocio, 
       promptEntrenamientoUsuario, 
@@ -690,7 +692,8 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
 
     // 🔎 LOGS DE DEPURACIÓN
     console.log('\n================ DEPURACIÓN DE MEMORIA / HISTORIAL ================');
-    console.log('📥 Mensaje actual del cliente:', mensajeCliente);
+    console.log('📥 Mensaje actual del cliente / instrucción:', mensajeCliente);
+    console.log('📌 Modo de Operación:', modoOperacion);
     console.log('📚 ¿Llegó historialChat?:', historialChat ? `Sí (Elementos: ${historialChat.length})` : 'NO / VACÍO');
     if (historialChat && Array.isArray(historialChat)) {
       console.log('📋 Contenido del historial:', JSON.stringify(historialChat, null, 2));
@@ -740,7 +743,9 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       }
     }
 
-    // CASO ESPECIAL: Análisis de Lectura / Explicación
+    // ==========================================
+    // CASO 1: Análisis de Lectura / Explicación
+    // ==========================================
     if (tipoAccion === 'analizar_explicar') {
       let conversacionContexto = '';
       if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
@@ -768,7 +773,58 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       return res.json({ respuesta: completionAnalisis.choices[0].message.content.trim() });
     }
 
-    // 1. EVALUACIÓN Y ADAPTACIÓN DEL ROL / MODO (Dinámico y Flexible)
+    // ==========================================
+    // CASO 2: Redacción de Correo Desde Cero
+    // ==========================================
+    if (modoOperacion === 'redaccion_desde_cero') {
+      const promptRedaccion = `
+Eres un asistente experto en redacción de correos electrónicos comerciales y profesionales.
+
+OBJETIVO:
+Redacta un correo desde cero basándote estrictamente en el objetivo o las instrucciones enviadas por el usuario.
+
+DESTINATARIO (si aplica): ${destinatario || 'Cliente / Prospecto'}
+OBJETIVO E INSTRUCCIONES DEL CORREO: "${mensajeCliente}"
+
+DATOS DEL NEGOCIO Y CONTEXTO:
+${contextoNegocio || promptEntrenamientoUsuario || 'Sin contexto adicional.'}
+
+FORMATO DE SALIDA REQUERIDO (JSON ESTRICTO):
+Responde ÚNICAMENTE con un objeto JSON válido con este formato:
+{
+  "asunto": "Asunto claro y atractivo aquí",
+  "respuesta": "Cuerpo completo del correo redactado aquí"
+}
+      `.trim();
+
+      const completionRedaccion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: promptRedaccion }],
+        response_format: { type: "json_object" },
+        temperature: 0.6,
+        max_tokens: 450
+      });
+
+      const jsonOutput = JSON.parse(completionRedaccion.choices[0].message.content.trim());
+
+      // Incrementar contador de tokens
+      if (req.userLicenseDoc) {
+        req.userLicenseDoc.tokensUsados = (req.userLicenseDoc.tokensUsados || 0) + 1;
+        req.userLicenseDoc.usageCount = req.userLicenseDoc.tokensUsados;
+        await req.userLicenseDoc.save();
+      }
+
+      return res.json({
+        asunto: jsonOutput.asunto || 'Propuesta Comercial',
+        respuesta: jsonOutput.respuesta || ''
+      });
+    }
+
+    // ==========================================
+    // CASO 3: Generación Estándar / Copiloto de Ventas
+    // ==========================================
+
+    // 1. EVALUACIÓN Y ADAPTACIÓN DEL ROL / MODO
     let reglaModo = '';
     switch (modoOperacion) {
       case 'soporte':
@@ -779,8 +835,8 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         reglaModo = `ROL Y OBJETIVO: Asistente Informativo. Brinda respuesta clara a preguntas sobre servicios, políticas o datos del negocio.`;
         break;
 
+      case 'copiloto':
       case 'simulador_respuesta_comercial':
-      case 'redaccion_desde_cero':
       case 'ventas':
       default:
         let instruccionAccion = '';
@@ -821,7 +877,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
         break;
     }
 
-    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT NEUTRO Y TOTALMENTE CONTROLADO POR EL USUARIO
+    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT
     const directivaUsuario = (promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0)
       ? promptEntrenamientoUsuario
       : reglaModo;
@@ -848,14 +904,12 @@ REGLAS DE FORMATO Y ESTILO:
 - Longitud: Mantén la respuesta directa y al grano.
     `.trim();
 
-    // 4. CONSTRUIR MENSAJES PARA OPENAI MAPEANDO CORRECTAMENTE ROLES (user / assistant)
+    // 4. CONSTRUIR MENSAJES PARA OPENAI
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
       historialChat.forEach(msg => {
         const remitente = (msg.remitente || msg.role || '').toLowerCase();
-        
-        // Corrección de roles para historial
         const rolOpenAI = (remitente === 'bot' || remitente === 'assistant' || remitente === 'asesor') ? 'assistant' : 'user';
         
         mensajesChatOpenAI.push({
@@ -864,7 +918,6 @@ REGLAS DE FORMATO Y ESTILO:
         });
       });
 
-      // Evitar duplicar el último mensaje si ya venía en el historial
       const ultimoMsgObj = historialChat[historialChat.length - 1];
       const textoUltimo = ultimoMsgObj.texto || ultimoMsgObj.content || '';
       const remitenteUltimo = (ultimoMsgObj.remitente || ultimoMsgObj.role || '').toLowerCase();
@@ -872,26 +925,28 @@ REGLAS DE FORMATO Y ESTILO:
       const esIgualAlUltimo = textoUltimo.trim() === mensajeCliente.trim() && (remitenteUltimo !== 'bot' && remitenteUltimo !== 'assistant' && remitenteUltimo !== 'asesor');
 
       if (!esIgualAlUltimo) {
-        mensajesChatOpenAI.push({ 
-          role: 'user', 
-          content: mensajeCliente 
-        });
+        let contenidoMensaje = mensajeCliente;
+        if (instruccionAdicional && instruccionAdicional.trim().length > 0) {
+          contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL PARA LA RESPUESTA: ${instruccionAdicional.trim()}]`;
+        }
+        mensajesChatOpenAI.push({ role: 'user', content: contenidoMensaje });
       }
     } else {
-      mensajesChatOpenAI.push({ 
-        role: 'user', 
-        content: mensajeCliente 
-      });
+      let contenidoMensaje = mensajeCliente;
+      if (instruccionAdicional && instruccionAdicional.trim().length > 0) {
+        contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL PARA LA RESPUESTA: ${instruccionAdicional.trim()}]`;
+      }
+      mensajesChatOpenAI.push({ role: 'user', content: contenidoMensaje });
     }
 
-    // 🔎 LOG FINAL DE PAYLOAD ENVIADO A OPENAI
+    // 🔎 LOG FINAL
     console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: mensajesChatOpenAI,
       temperature: 0.5, 
-      max_tokens: 300
+      max_tokens: 350
     });
 
     const respuestaIA = completion.choices[0].message.content.trim();
