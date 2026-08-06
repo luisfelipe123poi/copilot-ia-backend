@@ -753,8 +753,7 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
       }
 
       const promptExplicacion = `
-        Eres un asistente analista de comunicación.
-        Analiza el siguiente mensaje entrante y el contexto del correo/chat.
+        Analiza el siguiente mensaje entrante y el contexto de la conversación.
         
         OBJETIVO:
         Explica en MÁXIMO 2 oraciones breves, claras y directas cuál es el tema principal, la intención o el contenido central del mensaje.
@@ -778,32 +777,24 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     // ==========================================
     if (modoOperacion === 'redaccion_desde_cero') {
       const promptRedaccion = `
-Eres un ejecutivo humano experto en redacción comercial y profesional.
-
 OBJETIVO:
-Redacta un correo desde cero basándote estrictamente en las instrucciones enviadas.
+Redacta un correo desde cero basándote estrictamente en las instrucciones enviadas y en las directivas del usuario.
 
-DESTINATARIO: ${destinatario || 'Cliente / Prospecto'}
+DESTINATARIO: ${destinatario || 'Destinatario'}
 OBJETIVO E INSTRUCCIONES: "${mensajeCliente}"
 
-DATOS DEL NEGOCIO Y CONTEXTO:
-${contextoNegocio || promptEntrenamientoUsuario || 'Sin contexto adicional.'}
+INSTRUCCIONES DEL USUARIO Y CONTEXTO:
+${promptEntrenamientoUsuario || contextoNegocio || 'Responde de manera natural según las instrucciones.'}
 
-REGLAS DE SELECCIÓN Y USO DE ENLACES:
-1. Si el correo requiere enviar un enlace comercial (compras, agendar demo, precios, cambiar de plan): usa ÚNICAMENTE un link de la sección "Enlaces Clave (Checkout, Agenda, Web)".
-2. Si el correo requiere guías, tutoriales o solucionar errores técnicos: usa ÚNICAMENTE un link de la sección "Links & Videos de Soporte por Intención".
-3. NUNCA inventes enlaces ni mezcles URLs de soporte con las de ventas salvo que el objetivo lo exija expresamente.
-
-REGLAS DE FORMATO Y ESTILO (HUMANO Y DIRECTO):
-1. NUNCA uses estructuras de robot ni pasos numerados (1, 2, 3) para explicar acciones sencillas.
-2. Redacta de forma fluida, conversacional y profesional en párrafos breves.
-3. Evita frases cliché de asistente ("Espero que este correo te encuentre bien", "Quedo atento a tus comentarios para proceder").
-4. Cierra directamente proponiendo una acción clara o una pregunta directa.
+REGLAS DE HUMANIZACIÓN (OBLIGATORIO):
+1. Redacta como una persona real, de forma natural, fluida y profesional.
+2. PROHIBIDO usar frases clisé o robóticas de IA ("Espero que este correo te encuentre bien", "Quedo atento a tus comentarios", "Estoy aquí para ayudarte").
+3. NUNCA uses viñetas ni pasos numerados (1, 2, 3) a menos que la instrucción lo pida expresamente.
 
 FORMATO DE SALIDA REQUERIDO (JSON ESTRICTO):
 Responde ÚNICAMENTE con un objeto JSON válido con este formato:
 {
-  "asunto": "Asunto claro y profesional aquí",
+  "asunto": "Asunto claro aquí",
   "respuesta": "Cuerpo completo del correo redactado aquí"
 }
       `.trim();
@@ -826,107 +817,44 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
       }
 
       return res.json({
-        asunto: jsonOutput.asunto || 'Propuesta Comercial',
+        asunto: jsonOutput.asunto || 'Sin asunto',
         respuesta: jsonOutput.respuesta || ''
       });
     }
 
     // ==========================================
-    // CASO 3: Generación Estándar / Copiloto de Ventas
+    // CASO 3: Generación Estándar (Controlada por Prompt de Extensión)
     // ==========================================
 
-    // 1. EVALUACIÓN Y ADAPTACIÓN DEL ROL / MODO
-    let reglaModo = '';
-    switch (modoOperacion) {
-      case 'soporte':
-        reglaModo = `ROL Y OBJETIVO: Asistente de Soporte Técnico. Resuelve la duda u operativa planteada con claridad, fluidez y sin explicaciones innecesarias.`;
-        break;
-
-      case 'informacion':
-        reglaModo = `ROL Y OBJETIVO: Asistente Informativo. Brinda respuesta directa sobre servicios o datos del negocio de forma concisa.`;
-        break;
-
-      case 'copiloto':
-      case 'simulador_respuesta_comercial':
-      case 'ventas':
-      default:
-        let instruccionAccion = '';
-        if (tipoAccion === 'rebatir_precio') {
-          instruccionAccion = 'El cliente cuestiona el precio. Resalta el valor de forma natural y propone agendar o definir el siguiente paso sin sonar defensivo.';
-        } else {
-          instruccionAccion = 'Si el mensaje es comercial o de ventas, orienta al usuario al siguiente paso lógico (llamada, agendamiento o decisión) de forma cercana y profesional.';
-        }
-
-        reglaModo = `
-          ROL Y OBJETIVO: Asistente de Comunicación Comercial y Atención Directa.
-          DIRECTIVA: ${instruccionAccion}
-        `;
-        break;
-    }
-
-    // 2. CONFIGURAR INSTRUCCIONES DE TONO
+    // 1. CONFIGURAR INSTRUCCIONES DE TONO (OPCIONALES SI EL USUARIO ENVÍA TONO)
     let instruccionTono = '';
-    switch (tono) {
-      case 'empatico':
-        instruccionTono = 'Usa un tono cálido, humano, amigable y cercano.';
-        break;
-      case 'urgencia':
-        instruccionTono = 'Mantén un tono ágil, directo y enfocado en la pronta acción.';
-        break;
-      case 'persuasivo':
-        instruccionTono = 'Usa un tono persuasivo, seguro y enfocado en el valor comercial.';
-        break;
-      case 'breve':
-        instruccionTono = 'Sé extremadamente breve, conciso (máximo 2 a 3 oraciones).';
-        break;
-      case 'oferta':
-        instruccionTono = 'Enfócate en destacar beneficios concretos y facilidades de acceso.';
-        break;
-      case 'directo':
-      default:
-        instruccionTono = 'Sé directo, natural, profesional y conversacional.';
-        break;
-    }
+    if (tono === 'empatico') instruccionTono = 'Usa un tono cálido, amigable y cercano.';
+    else if (tono === 'urgencia') instruccionTono = 'Mantén un tono ágil, directo y de pronta acción.';
+    else if (tono === 'persuasivo') instruccionTono = 'Usa un tono persuasivo y seguro.';
+    else if (tono === 'breve') instruccionTono = 'Sé muy breve y conciso (1 a 3 oraciones).';
+    else if (tono === 'directo') instruccionTono = 'Sé directo, natural y al punto.';
 
-    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT CON HUMANIZACIÓN ESTRICTA Y ENRUTAMIENTO DE LINKS
-    const directivaUsuario = (promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0)
-      ? promptEntrenamientoUsuario
-      : reglaModo;
-
-    const infoNegocio = contextoNegocio || (typeof CONTEXTO_NEGOCIO_DEFAULT !== 'undefined' ? CONTEXTO_NEGOCIO_DEFAULT : '');
+    // 2. CONSTRUCCIÓN DEL SYSTEM PROMPT STRICTAMENTE HUMANO SIN REGLAS COMERCIALES
+    const directivasPersonalizadas = promptEntrenamientoUsuario || contextoNegocio || 'Responde directamente al mensaje atendiendo la consulta de forma natural.';
 
     const systemPrompt = `
-Eres un ejecutivo humano, comercial y experto en atención al cliente y ventas. Tu tono es 100% natural, profesional y fluido.
+REGLA PRINCIPAL:
+Escribe 100% como un ser humano real comunicándose por chat o correo. Adapta toda la lógica, comportamiento y contenido estricto a las INSTRUCCIONES DEL USUARIO.
 
-DIRECTIVAS PRINCIPALES:
-1. Obedece las instrucciones personalizadas configuradas en "INSTRUCCIONES DEL USUARIO".
-2. Analiza libremente el texto recibido. NO fuerces cierres comerciales si es una notificación automática, boletín masivo o circular sin relación de venta, A MENOS que el usuario te lo ordene. Si es un boletín, genera un resumen o acuse breve.
+REGLAS OBLIGATORIAS DE HUMANIZACIÓN (PROHIBIDO ACTUAR COMO ROBOT/IA):
+- PROHIBIDO usar listas numeradas (1., 2., 3.) o viñetas salvo que el usuario lo pida expresamente.
+- PROHIBIDO usar frases cliché de asistente virtual ("¡Hola! ¿En qué puedo ayudarte hoy?", "Espero que te encuentres bien", "Quedo a tu entera disposición", "No dudes en contactarme").
+- NUNCA fuerces cierres comerciales, agendas de citas, demos, ni enlaces a menos que las INSTRUCCIONES DEL USUARIO lo indiquen explícitamente.
+- Redacta en párrafos cortos, fluidos y de estilo conversacional directo.
+- Si no hay instrucciones específicas de negocio, limítate a responder lo que la persona pregunta de forma lógica y natural.
 
-REGLAS DE SELECCIÓN Y USO DE ENLACES (ESTRICTO):
-- Si el usuario muestra INTENCIÓN COMERCIAL (comprar, agendar demo, cambiar de plan, precios, checkout, ver la web): usa ÚNICAMENTE un enlace de la sección "Enlaces Clave (Checkout, Agenda, Web)".
-- Si el usuario coincide con disparadores de SOPORTE TÉCNICO (instrucciones, cómo se usa, no puedo instalar, error al abrir, configurar API): usa ÚNICAMENTE el enlace/video correspondiente de la sección "Links & Videos de Soporte por Intención".
-- NUNCA inventes URLs. Usa exclusivamente los enlaces proporcionados en el contexto.
-- Integra el enlace de forma natural en el flujo del mensaje (ej: "Puedes revisar los detalles aquí: [LINK]"). Evita preámbulos robóticos como "A continuación te adjunto el link correspondiente:".
+INSTRUCCIONES DEL USUARIO (ENVIADAS DESDE LA EXTENSIÓN):
+${directivasPersonalizadas}
 
-REGLAS ESTRICTAS DE FORMATO Y ESTILO (PROHIBIDO PARECER IA):
-- PROHIBIDO usar listas numeradas (1., 2., 3.) o viñetas para explicar pasos o instrucciones simples (ej. "sigue estos pasos para agendar").
-- PROHIBIDO usar frases acartonadas o robóticas de asistente virtual como: "Puedes seguir estos pasos:", "¡Estoy aquí para ayudarte!", "No dudes en avisarme", "Espero que te encuentres bien".
-- NO expliques el proceso lógico obvio de una transacción (no digas "en la reunión hablas de tu plan y luego pagas", solo invita a la reunión o llamada directamente).
-- Estructura el mensaje en párrafos cortos y fluidos (de 1 a 3 líneas por bloque).
-- Usa un lenguaje conversacional que va directo al punto.
-- Cierra el mensaje asumiendo la acción o con una pregunta directa sobre la disponibilidad del cliente.
-- Usa máximo 1 emoji relevante si aplica (evita ráfagas o combinaciones como 📅✨).
-
-INSTRUCCIONES DEL USUARIO (POPUP / CONFIGURACIÓN):
-${directivaUsuario}
-
-CONTEXTO Y DATOS DEL NEGOCIO / OFERTA / ENLACES:
-${infoNegocio || 'Sin datos adicionales de negocio.'}
-
-TONO EXIGIDO: ${instruccionTono}
+${instruccionTono ? `TONO DE COMUNICACIÓN: ${instruccionTono}` : ''}
     `.trim();
 
-    // 4. CONSTRUIR MENSAJES PARA OPENAI
+    // 3. CONSTRUIR MENSAJES PARA OPENAI
     let mensajesChatOpenAI = [{ role: 'system', content: systemPrompt }];
 
     if (historialChat && Array.isArray(historialChat) && historialChat.length > 0) {
@@ -949,20 +877,20 @@ TONO EXIGIDO: ${instruccionTono}
       if (!esIgualAlUltimo) {
         let contenidoMensaje = mensajeCliente;
         if (instruccionAdicional && instruccionAdicional.trim().length > 0) {
-          contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL PARA LA RESPUESTA: ${instruccionAdicional.trim()}]`;
+          contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL: ${instruccionAdicional.trim()}]`;
         }
         mensajesChatOpenAI.push({ role: 'user', content: contenidoMensaje });
       }
     } else {
       let contenidoMensaje = mensajeCliente;
       if (instruccionAdicional && instruccionAdicional.trim().length > 0) {
-        contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL PARA LA RESPUESTA: ${instruccionAdicional.trim()}]`;
+        contenidoMensaje += `\n\n[INSTRUCCIÓN ADICIONAL: ${instruccionAdicional.trim()}]`;
       }
       mensajesChatOpenAI.push({ role: 'user', content: contenidoMensaje });
     }
 
     // 🔎 LOG FINAL
-    console.log('🤖 Payload final de messages enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
+    console.log('🤖 Payload final enviado a OpenAI:', JSON.stringify(mensajesChatOpenAI, null, 2));
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
