@@ -789,6 +789,11 @@ OBJETIVO E INSTRUCCIONES: "${mensajeCliente}"
 DATOS DEL NEGOCIO Y CONTEXTO:
 ${contextoNegocio || promptEntrenamientoUsuario || 'Sin contexto adicional.'}
 
+REGLAS DE SELECCIÓN Y USO DE ENLACES:
+1. Si el correo requiere enviar un enlace comercial (compras, agendar demo, precios, cambiar de plan): usa ÚNICAMENTE un link de la sección "Enlaces Clave (Checkout, Agenda, Web)".
+2. Si el correo requiere guías, tutoriales o solucionar errores técnicos: usa ÚNICAMENTE un link de la sección "Links & Videos de Soporte por Intención".
+3. NUNCA inventes enlaces ni mezcles URLs de soporte con las de ventas salvo que el objetivo lo exija expresamente.
+
 REGLAS DE FORMATO Y ESTILO (HUMANO Y DIRECTO):
 1. NUNCA uses estructuras de robot ni pasos numerados (1, 2, 3) para explicar acciones sencillas.
 2. Redacta de forma fluida, conversacional y profesional en párrafos breves.
@@ -883,7 +888,7 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
         break;
     }
 
-    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT CON HUMANIZACIÓN ESTRICTA
+    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT CON HUMANIZACIÓN ESTRICTA Y ENRUTAMIENTO DE LINKS
     const directivaUsuario = (promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0)
       ? promptEntrenamientoUsuario
       : reglaModo;
@@ -897,6 +902,12 @@ DIRECTIVAS PRINCIPALES:
 1. Obedece las instrucciones personalizadas configuradas en "INSTRUCCIONES DEL USUARIO".
 2. Analiza libremente el texto recibido. NO fuerces cierres comerciales si es una notificación automática, boletín masivo o circular sin relación de venta, A MENOS que el usuario te lo ordene. Si es un boletín, genera un resumen o acuse breve.
 
+REGLAS DE SELECCIÓN Y USO DE ENLACES (ESTRICTO):
+- Si el usuario muestra INTENCIÓN COMERCIAL (comprar, agendar demo, cambiar de plan, precios, checkout, ver la web): usa ÚNICAMENTE un enlace de la sección "Enlaces Clave (Checkout, Agenda, Web)".
+- Si el usuario coincide con disparadores de SOPORTE TÉCNICO (instrucciones, cómo se usa, no puedo instalar, error al abrir, configurar API): usa ÚNICAMENTE el enlace/video correspondiente de la sección "Links & Videos de Soporte por Intención".
+- NUNCA inventes URLs. Usa exclusivamente los enlaces proporcionados en el contexto.
+- Integra el enlace de forma natural en el flujo del mensaje (ej: "Puedes revisar los detalles aquí: [LINK]"). Evita preámbulos robóticos como "A continuación te adjunto el link correspondiente:".
+
 REGLAS ESTRICTAS DE FORMATO Y ESTILO (PROHIBIDO PARECER IA):
 - PROHIBIDO usar listas numeradas (1., 2., 3.) o viñetas para explicar pasos o instrucciones simples (ej. "sigue estos pasos para agendar").
 - PROHIBIDO usar frases acartonadas o robóticas de asistente virtual como: "Puedes seguir estos pasos:", "¡Estoy aquí para ayudarte!", "No dudes en avisarme", "Espero que te encuentres bien".
@@ -909,7 +920,7 @@ REGLAS ESTRICTAS DE FORMATO Y ESTILO (PROHIBIDO PARECER IA):
 INSTRUCCIONES DEL USUARIO (POPUP / CONFIGURACIÓN):
 ${directivaUsuario}
 
-CONTEXTO Y DATOS DEL NEGOCIO / OFERTA:
+CONTEXTO Y DATOS DEL NEGOCIO / OFERTA / ENLACES:
 ${infoNegocio || 'Sin datos adicionales de negocio.'}
 
 TONO EXIGIDO: ${instruccionTono}
