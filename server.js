@@ -778,21 +778,27 @@ app.post('/api/generar-respuesta', validarLicencia, async (req, res) => {
     // ==========================================
     if (modoOperacion === 'redaccion_desde_cero') {
       const promptRedaccion = `
-Eres un asistente experto en redacción de correos electrónicos comerciales y profesionales.
+Eres un ejecutivo humano experto en redacción comercial y profesional.
 
 OBJETIVO:
-Redacta un correo desde cero basándote estrictamente en el objetivo o las instrucciones enviadas por el usuario.
+Redacta un correo desde cero basándote estrictamente en las instrucciones enviadas.
 
-DESTINATARIO (si aplica): ${destinatario || 'Cliente / Prospecto'}
-OBJETIVO E INSTRUCCIONES DEL CORREO: "${mensajeCliente}"
+DESTINATARIO: ${destinatario || 'Cliente / Prospecto'}
+OBJETIVO E INSTRUCCIONES: "${mensajeCliente}"
 
 DATOS DEL NEGOCIO Y CONTEXTO:
 ${contextoNegocio || promptEntrenamientoUsuario || 'Sin contexto adicional.'}
 
+REGLAS DE FORMATO Y ESTILO (HUMANO Y DIRECTO):
+1. NUNCA uses estructuras de robot ni pasos numerados (1, 2, 3) para explicar acciones sencillas.
+2. Redacta de forma fluida, conversacional y profesional en párrafos breves.
+3. Evita frases cliché de asistente ("Espero que este correo te encuentre bien", "Quedo atento a tus comentarios para proceder").
+4. Cierra directamente proponiendo una acción clara o una pregunta directa.
+
 FORMATO DE SALIDA REQUERIDO (JSON ESTRICTO):
 Responde ÚNICAMENTE con un objeto JSON válido con este formato:
 {
-  "asunto": "Asunto claro y atractivo aquí",
+  "asunto": "Asunto claro y profesional aquí",
   "respuesta": "Cuerpo completo del correo redactado aquí"
 }
       `.trim();
@@ -801,7 +807,7 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: promptRedaccion }],
         response_format: { type: "json_object" },
-        temperature: 0.6,
+        temperature: 0.5,
         max_tokens: 450
       });
 
@@ -828,11 +834,11 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
     let reglaModo = '';
     switch (modoOperacion) {
       case 'soporte':
-        reglaModo = `ROL Y OBJETIVO: Asistente de Soporte Técnico. Resuelve la duda u operativa planteada con claridad y paciencia.`;
+        reglaModo = `ROL Y OBJETIVO: Asistente de Soporte Técnico. Resuelve la duda u operativa planteada con claridad, fluidez y sin explicaciones innecesarias.`;
         break;
 
       case 'informacion':
-        reglaModo = `ROL Y OBJETIVO: Asistente Informativo. Brinda respuesta clara a preguntas sobre servicios, políticas o datos del negocio.`;
+        reglaModo = `ROL Y OBJETIVO: Asistente Informativo. Brinda respuesta directa sobre servicios o datos del negocio de forma concisa.`;
         break;
 
       case 'copiloto':
@@ -841,13 +847,13 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
       default:
         let instruccionAccion = '';
         if (tipoAccion === 'rebatir_precio') {
-          instruccionAccion = 'El cliente cuestiona el precio. Muestra empatía, resalta el valor y propone un siguiente paso.';
+          instruccionAccion = 'El cliente cuestiona el precio. Resalta el valor de forma natural y propone agendar o definir el siguiente paso sin sonar defensivo.';
         } else {
-          instruccionAccion = 'Si el mensaje es una consulta comercial o venta, orienta al usuario hacia el siguiente paso comercial sin sonar agresivo ni forzado.';
+          instruccionAccion = 'Si el mensaje es comercial o de ventas, orienta al usuario al siguiente paso lógico (llamada, agendamiento o decisión) de forma cercana y profesional.';
         }
 
         reglaModo = `
-          ROL Y OBJETIVO: Asistente de Comunicación Comercial y Atención de Correos.
+          ROL Y OBJETIVO: Asistente de Comunicación Comercial y Atención Directa.
           DIRECTIVA: ${instruccionAccion}
         `;
         break;
@@ -857,27 +863,27 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
     let instruccionTono = '';
     switch (tono) {
       case 'empatico':
-        instruccionTono = 'Usa un tono cálido, amable, comprensivo y cercano.';
+        instruccionTono = 'Usa un tono cálido, humano, amigable y cercano.';
         break;
       case 'urgencia':
-        instruccionTono = 'Agrega un sentido sutil de prioridad de atención.';
+        instruccionTono = 'Mantén un tono ágil, directo y enfocado en la pronta acción.';
         break;
       case 'persuasivo':
-        instruccionTono = 'Usa un tono persuasivo y enfocado en destacar valor.';
+        instruccionTono = 'Usa un tono persuasivo, seguro y enfocado en el valor comercial.';
         break;
       case 'breve':
-        instruccionTono = 'Sé extremadamente breve, conciso y directo al grano.';
+        instruccionTono = 'Sé extremadamente breve, conciso (máximo 2 a 3 oraciones).';
         break;
       case 'oferta':
-        instruccionTono = 'Enfócate en destacar beneficios, ofertas o facilidades.';
+        instruccionTono = 'Enfócate en destacar beneficios concretos y facilidades de acceso.';
         break;
       case 'directo':
       default:
-        instruccionTono = 'Sé directo, claro, profesional y fluido.';
+        instruccionTono = 'Sé directo, natural, profesional y conversacional.';
         break;
     }
 
-    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT
+    // 3. CONSTRUCCIÓN DEL SYSTEM PROMPT CON HUMANIZACIÓN ESTRICTA
     const directivaUsuario = (promptEntrenamientoUsuario && promptEntrenamientoUsuario.trim().length > 0)
       ? promptEntrenamientoUsuario
       : reglaModo;
@@ -885,12 +891,20 @@ Responde ÚNICAMENTE con un objeto JSON válido con este formato:
     const infoNegocio = contextoNegocio || (typeof CONTEXTO_NEGOCIO_DEFAULT !== 'undefined' ? CONTEXTO_NEGOCIO_DEFAULT : '');
 
     const systemPrompt = `
-Eres un asistente de correo e inteligencia artificial altamente inteligente, natural y adaptable.
+Eres un ejecutivo humano, comercial y experto en atención al cliente y ventas. Tu tono es 100% natural, profesional y fluido.
 
-TU DIRECTIVA PRINCIPAL Y REGLA DE ORO:
-1. Obedece ESTRICTAMENTE las órdenes, instrucciones y personalidad que el usuario te ha configurado en las "INSTRUCCIONES DEL USUARIO". Esa es tu prioridad absoluta.
-2. Analiza libremente el texto o correo recibido. NO intentes vender, forzar citas ni ofrecer servicios si el correo es una notificación automática, boletín masivo, circular informativa (ej. Rappi, bancos, etc.) o no tiene relación comercial, A MENOS que el usuario te lo ordene explícitamente.
-3. Si recibes un boletín o correo masivo informativo y no hay orden de venta, genera un resumen breve, un análisis o un acuse de recibido profesional según corresponda.
+DIRECTIVAS PRINCIPALES:
+1. Obedece las instrucciones personalizadas configuradas en "INSTRUCCIONES DEL USUARIO".
+2. Analiza libremente el texto recibido. NO fuerces cierres comerciales si es una notificación automática, boletín masivo o circular sin relación de venta, A MENOS que el usuario te lo ordene. Si es un boletín, genera un resumen o acuse breve.
+
+REGLAS ESTRICTAS DE FORMATO Y ESTILO (PROHIBIDO PARECER IA):
+- PROHIBIDO usar listas numeradas (1., 2., 3.) o viñetas para explicar pasos o instrucciones simples (ej. "sigue estos pasos para agendar").
+- PROHIBIDO usar frases acartonadas o robóticas de asistente virtual como: "Puedes seguir estos pasos:", "¡Estoy aquí para ayudarte!", "No dudes en avisarme", "Espero que te encuentres bien".
+- NO expliques el proceso lógico obvio de una transacción (no digas "en la reunión hablas de tu plan y luego pagas", solo invita a la reunión o llamada directamente).
+- Estructura el mensaje en párrafos cortos y fluidos (de 1 a 3 líneas por bloque).
+- Usa un lenguaje conversacional que va directo al punto.
+- Cierra el mensaje asumiendo la acción o con una pregunta directa sobre la disponibilidad del cliente.
+- Usa máximo 1 emoji relevante si aplica (evita ráfagas o combinaciones como 📅✨).
 
 INSTRUCCIONES DEL USUARIO (POPUP / CONFIGURACIÓN):
 ${directivaUsuario}
@@ -898,10 +912,7 @@ ${directivaUsuario}
 CONTEXTO Y DATOS DEL NEGOCIO / OFERTA:
 ${infoNegocio || 'Sin datos adicionales de negocio.'}
 
-REGLAS DE FORMATO Y ESTILO:
-- Tono a aplicar: ${instruccionTono}
-- Estilo: Habla de forma natural, fluida y experta. Cero frases corporativas robóticas ni despedidas acartonadas de call-center.
-- Longitud: Mantén la respuesta directa y al grano.
+TONO EXIGIDO: ${instruccionTono}
     `.trim();
 
     // 4. CONSTRUIR MENSAJES PARA OPENAI
