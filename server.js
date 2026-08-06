@@ -1485,8 +1485,8 @@ app.post('/api/admin/crear-licencia-feedback', async (req, res) => {
                     <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 25px 30px; text-align: center; color: #94a3b8; font-size: 12px; line-height: 1.5;">
                       <p style="margin: 0 0 10px 0; font-weight: 600; color: #64748b;">Copilot.ai Software & Technology</p>
                       <p style="margin: 0 0 10px 0;">
-                        <a href="https://tudominio.com" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
-                        <a href="https://tudominio.com/soporte" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Soporte Técnico</a> |
+                        <a href="https://copilot.prestigecloser.com/" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Sitio Web</a> |
+                        <a href="https://t.me/copilotIA_notificacion_bot?start=VIP" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Soporte Técnico</a> |
                         <a href="https://tudominio.com/privacidad" style="color: #4f46e5; text-decoration: none; margin: 0 8px;">Política de Privacidad</a>
                       </p>
                       <p style="margin: 0; font-size: 11px;">Este es un mensaje automático enviado a ${email}. Por favor, conserva este correo para futuras referencias de tu licencia.</p>
