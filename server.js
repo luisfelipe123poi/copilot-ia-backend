@@ -624,6 +624,118 @@ app.post('/api/crear-checkout', async (req, res) => {
   }
 });
 
+// Endpoint para enviar la propuesta de feedback por correo
+router.post('/admin/enviar-propuesta-feedback', async (req, res) => {
+    try {
+        const { adminSecret, email, nombre } = req.body;
+
+        if (adminSecret !== process.env.ADMIN_SECRET) {
+            return res.status(401).json({ success: false, error: "No autorizado" });
+        }
+
+        if (!email) {
+            return res.status(400).json({ success: false, error: "El correo es obligatorio" });
+        }
+
+        const nombreUsuario = nombre || "Estimado/a usuario/a";
+        const logoUrl = "https://tu-dominio.com/logo.png"; // Reemplaza con la URL real de tu logo
+
+        const htmlFeedbackPropuesta = `
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+            <tr>
+              <td align="center">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                  
+                  <!-- Cabecera del Logo -->
+                  <tr>
+                    <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
+                      <img src="${logoUrl}" alt="Copilot.ai" width="220" style="display: block; border: 0; max-width: 90%; height: auto;">
+                    </td>
+                  </tr>
+
+                  <!-- Franja de Título -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
+                      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Invitación al Programa Exclusivo de Feedback 🚀</h1>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Forme parte de la evolución de nuestras herramientas de automatización</p>
+                    </td>
+                  </tr>
+
+                  <!-- Contenido Principal -->
+                  <tr>
+                    <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                      <p style="margin-top: 0;">Hola <strong>${nombreUsuario}</strong>,</p>
+                      
+                      <p>Nos ponemos en contacto con usted para invitarle de manera exclusiva a formar parte de nuestro <strong>Programa de Feedback de Extensiones</strong> en Copilot.ai.</p>
+                      
+                      <p><strong>¿Para qué sirven nuestras extensiones y en qué le beneficiarán?</strong><br>
+                      Nuestras extensiones están diseñadas para optimizar, automatizar y potenciar la gestión de procesos comerciales y de mensajería (como WhatsApp Sales Copilot), reduciendo drásticamente las tareas manuales y permitiendo escalar la atención y productividad de manera inteligente.</p>
+
+                      <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                        <p style="margin: 0; font-size: 14px; color: #1e293b;">
+                          <strong>¿Qué buscamos en este programa?</strong><br>
+                          Queremos contar con su valiosa opinión probando las nuevas actualizaciones de manera anticipada. Su rol consistirá en utilizar las herramientas en su entorno diario y reportarnos sugerencias, observaciones de rendimiento o mejoras que le gustaría ver integradas.
+                        </p>
+                      </div>
+
+                      <p>A cambio de su participación activa, le otorgaremos acceso prioritario y sin costo a nuestras licencias avanzadas de prueba personalizada.</p>
+
+                      <!-- Bloque de Acción / Respuesta -->
+                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin: 25px 0;">
+                        <tr>
+                          <td style="padding: 20px; text-align: center;">
+                            <span style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; display: block; margin-bottom: 8px;">¿Desea participar en el programa?</span>
+                            <p style="margin: 0; font-size: 14px; color: #334155;">
+                              Por favor, simplemente <strong>responda a este correo</strong> indicándonos claramente:
+                            </p>
+                            <div style="margin-top: 12px; font-size: 15px; font-weight: bold; color: #2563eb;">
+                              👉 Responda "SÍ" para activar su cuenta o "NO" en caso de declinar.
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="margin-bottom: 0;">Quedamos atentos a su confirmación para proceder con la creación de su perfil personalizado.</p>
+                      <p style="margin-top: 20px; margin-bottom: 0;">Atentamente,<br><strong>Equipo de Ingeniería y Producto - Copilot.ai</strong></p>
+                    </td>
+                  </tr>
+
+                  <!-- Pie de página -->
+                  <tr>
+                    <td style="background-color: #f8fafc; padding: 20px 30px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0;">
+                      Este es un mensaje automático enviado desde el panel de administración de Copilot.ai.
+                    </td>
+                  </tr>
+
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        `;
+
+        // Aquí ejecutas el envío de tu correo con la librería que uses (por ejemplo, Nodemailer)
+        // await enviarCorreo(email, "Invitación Exclusiva: Programa de Feedback Copilot.ai", htmlFeedbackPropuesta);
+
+        return res.status(200).json({ 
+            success: true, 
+            message: "Correo de propuesta formal enviado con éxito." 
+        });
+
+    } catch (error) {
+        console.error("Error al enviar propuesta:", error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ==========================================
 // ENDPOINT 1: Analizar Intención en Segundo Plano (Clasificación)
 // ==========================================
