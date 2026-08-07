@@ -918,6 +918,71 @@ ${instruccionTono ? `TONO DE COMUNICACIÓN: ${instruccionTono}` : ''}
 });
 
 // ==========================================
+// ENDPOINT NUEVO: Resumir Correo Electrónico
+// ==========================================
+app.post('/api/resumir-correo', validarLicencia, async (req, res) => {
+  try {
+    const { contenidoCorreo, remitente, asunto } = req.body;
+
+    if (!contenidoCorreo) {
+      return res.status(400).json({ error: 'El parámetro "contenidoCorreo" es obligatorio.' });
+    }
+
+    // 🛡️ VALIDACIÓN DE LÍMITE DE TOKENS (MISMA LÓGICA DE SEGURIDAD)
+    if (req.userLicenseDoc) {
+      const tipoLicencia = (req.userLicenseDoc.tipo || req.userLicenseDoc.status || 'trial').toLowerCase();
+      const tokensUsados = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
+      const limiteTokens = req.userLicenseDoc.limiteTokens !== undefined ? req.userLicenseDoc.limiteTokens : 20;
+
+      if (tokensUsados >= limiteTokens || tipoLicencia === 'expired' || tipoLicencia === 'inactive' || req.userLicenseDoc.suspended) {
+        return res.status(403).json({
+          code: 'TOKENS_EXPIRED',
+          error: 'Has alcanzado el límite de tus mensajes disponibles o tu suscripción se encuentra inactiva.'
+        });
+      }
+    }
+
+    const systemPromptResumen = `
+Actúa como un asistente ejecutivo ultrarrápido. Lee el siguiente correo electrónico y redacta un resumen directo, ejecutivo y al grano de máximo 3 o 4 líneas que explique exactamente qué quiere el cliente, cuál es el problema o de qué trata, sin rodeos.
+    `.trim();
+
+    const promptUsuario = `
+ASUNTO: ${asunto || 'Sin asunto'}
+REMITENTE: ${remitente || 'Desconocido'}
+
+CONTENIDO DEL CORREO:
+${contenidoCorreo}
+    `.trim();
+
+    const completionResumen = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPromptResumen },
+        { role: 'user', content: promptUsuario }
+      ],
+      temperature: 0.2,
+      max_tokens: 150
+    });
+
+    const resumenTexto = completionResumen.choices[0].message.content.trim();
+
+    // 🎯 INCREMENTO DE CONTADOR DE TOKENS EN LA LICENCIA (MONGODB)
+    if (req.userLicenseDoc) {
+      const currentTokens = req.userLicenseDoc.tokensUsados !== undefined ? req.userLicenseDoc.tokensUsados : (req.userLicenseDoc.usageCount || 0);
+      req.userLicenseDoc.tokensUsados = currentTokens + 1;
+      req.userLicenseDoc.usageCount = req.userLicenseDoc.tokensUsados;
+      await req.userLicenseDoc.save();
+    }
+
+    return res.json({ resumen: resumenTexto });
+
+  } catch (error) {
+    console.error('Error en /api/resumir-correo:', error.message);
+    return res.status(500).json({ error: 'Ocurrió un error al generar el resumen del correo.' });
+  }
+});
+
+// ==========================================
 // ENDPOINT PARA OBTENER TODA LA INFORMACIÓN DE UNA LICENCIA/USUARIO
 // ==========================================
 app.post('/api/admin/detalles-licencia', async (req, res) => {
