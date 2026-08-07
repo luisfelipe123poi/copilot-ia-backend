@@ -212,7 +212,7 @@ app.post('/api/generar-prueba', async (req, res) => {
       licenseKey: licenseKey,
       status: 'trial',
       plan: 'Prueba Gratuita',
-      limiteTokens: 300, // Ajustado a 300 respuestas de límite
+      limiteTokens: 1, // Ajustado a 300 respuestas de límite
       tokensUsados: 0,
       usageCount: 0,
       expiresAt: expiresAt
