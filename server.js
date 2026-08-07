@@ -625,7 +625,7 @@ app.post('/api/crear-checkout', async (req, res) => {
 });
 
 // Endpoint para enviar la propuesta de feedback por correo
-router.post('/admin/enviar-propuesta-feedback', async (req, res) => {
+app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
     try {
         const { adminSecret, email, nombre } = req.body;
 
@@ -722,8 +722,13 @@ router.post('/admin/enviar-propuesta-feedback', async (req, res) => {
         </html>
         `;
 
-        // Aquí ejecutas el envío de tu correo con la librería que uses (por ejemplo, Nodemailer)
-        // await enviarCorreo(email, "Invitación Exclusiva: Programa de Feedback Copilot.ai", htmlFeedbackPropuesta);
+        // Envío del correo usando transporter (asegúrate de tener configurado transporter previamente en tu server.js)
+        await transporter.sendMail({
+            from: process.env.EMAIL_FROM || '"Copilot.ai" <no-reply@copilot.ai>',
+            to: email,
+            subject: "Invitación Exclusiva: Programa de Feedback Copilot.ai",
+            html: htmlFeedbackPropuesta
+        });
 
         return res.status(200).json({ 
             success: true, 
