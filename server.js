@@ -258,7 +258,7 @@ app.post('/api/generar-prueba', async (req, res) => {
                     <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
                       <p style="margin-top: 0;">Hola,</p>
                       
-                      <p>Gracias por registrarte para probar nuestra tecnología. Hemos generado una credencial de acceso para que experimentes la automatización de Copilot.ai directamente en tu navegador (compatible con WebMail y Gmail).</p>
+                      <p>Gracias por registrarte para probar nuestra tecnología. Hemos generado una credencial de acceso para que experimentes la automatización de Copilot.ai directamente en tu navegador (compatible con Gmail y Whatsapp Web).</p>
                       
                       <p>A continuación, te proporcionamos tu clave de activación única:</p>
 
