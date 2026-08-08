@@ -722,18 +722,18 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         </html>
         `;
 
-        // Petición a la API de Brevo
+        // Petición a la API de Brevo con tu remitente corporativo fijo
         const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
                 "Accept": "application/json",
                 "Content-Type": "application/json",
-                "api-key": process.env.BREVO_API_KEY // Asegúrate de tener tu API key configurada en las variables de entorno
+                "api-key": process.env.BREVO_API_KEY
             },
             body: JSON.stringify({
                 sender: {
                     name: "Copilot.ai",
-                    email: process.env.EMAIL_FROM || "no-reply@copilot.ai" // Debe ser un remitente verificado en Brevo
+                    email: "copilot.ia@prestigecloser.com"
                 },
                 to: [{ email: email, name: nombreUsuario }],
                 subject: "Invitación Exclusiva: Programa de Feedback Copilot.ai",
