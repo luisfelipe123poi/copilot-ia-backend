@@ -624,7 +624,7 @@ app.post('/api/crear-checkout', async (req, res) => {
   }
 });
 
-// Endpoint para enviar la propuesta de feedback por correo
+// Endpoint para enviar la propuesta de feedback por correo usando la API de Brevo
 app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
     try {
         const { adminSecret, email, nombre } = req.body;
@@ -722,17 +722,34 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         </html>
         `;
 
-        // Envío del correo usando transporter (asegúrate de tener configurado transporter previamente en tu server.js)
-        await transporter.sendMail({
-            from: process.env.EMAIL_FROM || '"Copilot.ai" <no-reply@copilot.ai>',
-            to: email,
-            subject: "Invitación Exclusiva: Programa de Feedback Copilot.ai",
-            html: htmlFeedbackPropuesta
+        // Petición a la API de Brevo
+        const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "api-key": process.env.BREVO_API_KEY // Asegúrate de tener tu API key configurada en las variables de entorno
+            },
+            body: JSON.stringify({
+                sender: {
+                    name: "Copilot.ai",
+                    email: process.env.EMAIL_FROM || "no-reply@copilot.ai" // Debe ser un remitente verificado en Brevo
+                },
+                to: [{ email: email, name: nombreUsuario }],
+                subject: "Invitación Exclusiva: Programa de Feedback Copilot.ai",
+                htmlContent: htmlFeedbackPropuesta
+            })
         });
+
+        const brevoData = await brevoResponse.json();
+
+        if (!brevoResponse.ok) {
+            throw new Error(brevoData.message || "Error al enviar el correo mediante Brevo");
+        }
 
         return res.status(200).json({ 
             success: true, 
-            message: "Correo de propuesta formal enviado con éxito." 
+            message: "Correo de propuesta formal enviado con éxito a través de Brevo." 
         });
 
     } catch (error) {
