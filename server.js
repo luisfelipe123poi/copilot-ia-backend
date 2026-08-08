@@ -637,98 +637,50 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
             return res.status(400).json({ success: false, error: "El correo es obligatorio" });
         }
 
-        const nombreUsuario = nombre || "Estimado/a Invitado/a de Honor";
-        const logoUrl = "https://tu-dominio.com/logo.png"; // Reemplaza con la URL real de tu logo institucional
+        const nombreUsuario = nombre || "Invitado/a de Honor";
 
+        // HTML completo y detallado optimizado para mantener la estructura profesional sin caer en promociones
         const htmlFeedbackPropuesta = `
         <!DOCTYPE html>
         <html lang="es">
         <head>
           <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
         </head>
-        <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+        <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #111111; font-size: 15px; line-height: 1.6;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #ffffff; padding: 20px 0;">
             <tr>
-              <td align="center">
-                <table border="0" cellpadding="0" cellspacing="0" width="650" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+              <td align="left">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff;">
                   
-                  <!-- Cabecera del Logo -->
                   <tr>
-                    <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
-                      <img src="${logoUrl}" alt="Copilot.ai" width="220" style="display: block; border: 0; max-width: 90%; height: auto;">
-                    </td>
-                  </tr>
-
-                  <!-- Franja de Título Principal -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px; text-align: center; color: #ffffff;">
-                      <h1 style="margin: 0; font-size: 22px; font-weight: 700;">🌟 Invitación Exclusiva: Invitado de Honor Premium</h1>
-                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Acceso VIP sin costo al Programa de Feedback de Copilot.ai</p>
-                    </td>
-                  </tr>
-
-                  <!-- Contenido Principal -->
-                  <tr>
-                    <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                    <td style="padding: 10px 20px;">
                       <p style="margin-top: 0;">Hola <strong>${nombreUsuario}</strong>,</p>
                       
-                      <p>Nos dirigimos a usted con mucho entusiasmo para extenderle una invitación exclusiva y seleccionada como <strong>Invitado de Honor Premium</strong> en nuestro programa privado de feedback y validación anticipada de tecnología.</p>
+                      <p>Nos ponemos en contacto contigo para extenderte una invitación personal y exclusiva como <strong>Invitado de Honor</strong> en nuestro programa privado de feedback y validación de tecnología para <strong>Copilot.ai</strong>.</p>
                       
-                      <p>Sabemos que la gestión comercial eficiente es vital. Por ello, hemos desarrollado un ecosistema avanzado de extensiones inteligentes diseñadas para eliminar la fricción operativa y multiplicar drásticamente los cierres de ventas. Durante este programa exclusivo, tendrá acceso total y sin costo a nuestras dos herramientas insignia:</p>
+                      <p>Sabemos que la agilidad comercial es clave. Por ello, hemos desarrollado un ecosistema avanzado de herramientas inteligentes para eliminar la fricción operativa y multiplicar los cierres de ventas. Durante este programa, tendrás acceso total y sin costo a nuestras soluciones principales:</p>
 
-                      <!-- Bloque de Herramienta 1 -->
-                      <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-                        <h3 style="margin: 0 0 8px 0; color: #1e3a8a; font-size: 16px;">🚀 1. WhatsApp Sales Copilot (Overlay Multicanal)</h3>
-                        <p style="margin: 0; font-size: 14px; color: #334155;">
-                          <strong>¿Qué resuelve?</strong> Automatiza la lectura y comprensión de chats complejos y notas de voz kilométricas de los clientes[cite: 3].<br>
-                          <strong>Ventajas principales:</strong> Transcribe notas de voz de clientes en tiempo real[cite: 3], genera borradores de cierre adaptados por tonos persuasivos (formal, directo, urgente)[cite: 3], inyecta respuestas con un solo clic[cite: 3] y le permite dictar sus propias respuestas de forma ultrarrápida usando inteligencia artificial[cite: 3].
-                        </p>
-                      </div>
+                      <p><strong>1. WhatsApp Sales Copilot (Overlay Multicanal):</strong><br>
+                      Automatiza la lectura de chats complejos y notas de voz kilométricas de los clientes[cite: 3]. Transcribe audios en tiempo real[cite: 3], redacta borradores de cierre adaptados por tonos persuasivos (formal, directo, urgente)[cite: 3], inyecta respuestas con un solo clic[cite: 3] y te permite dictar tus mensajes con inteligencia artificial[cite: 3].</p>
+                      
+                      <p><strong>2. Gmail Sales Copilot (Sincronización Multietiqueta & IA):</strong><br>
+                      Elimina la pérdida de tiempo leyendo hilos interminables de correos y simplifica la redacción corporativa[cite: 4]. Escanea y resume correos extensos al instante[cite: 4], redacta respuestas o propuestas comerciales desde cero utilizando plantillas preestablecidas (ventas, cotizaciones, alianzas)[cite: 4] e integra dictado inteligente por voz multicampo[cite: 4].</p>
 
-                      <!-- Bloque de Herramienta 2 -->
-                      <div style="background-color: #f8fafc; border-left: 4px solid #10b981; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-                        <h3 style="margin: 0 0 8px 0; color: #065f46; font-size: 16px;">💼 2. Gmail Sales Copilot (Sincronización Multietiqueta & IA)</h3>
-                        <p style="margin: 0; font-size: 14px; color: #334155;">
-                          <strong>¿Qué resuelve?</strong> Elimina la pérdida de tiempo leyendo hilos interminables de correos electrónicos y simplifica la redacción comercial corporativa[cite: 4].<br>
-                          <strong>Ventajas principales:</strong> Escanea y resume correos extensos al instante[cite: 4], redacta respuestas o propuestas comerciales desde cero utilizando plantillas preestablecidas (ventas, cotizaciones, alianzas)[cite: 4] e integra un sistema de dictado inteligente multicampo mediante voz[cite: 4].
-                        </p>
-                      </div>
+                      <p><strong>Beneficios de tu Membresía VIP:</strong></p>
+                      <ul style="padding-left: 20px; margin-top: 5px; margin-bottom: 15px;">
+                        <li>Acceso ilimitado sin costo a todas las funciones PRO durante el periodo de prueba.</li>
+                        <li>Tus opiniones y sugerencias técnicas influirán de manera directa en el desarrollo de nuestras próximas actualizaciones globales.</li>
+                        <li>Soporte y canal directo con nuestro equipo de ingeniería y producto.</li>
+                      </ul>
 
-                      <!-- Beneficios del Programa -->
-                      <div style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 100%, rgba(16, 185, 129, 0.08)); border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin: 25px 0;">
-                        <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 15px; text-transform: uppercase;">🎁 Beneficios de su Membresía VIP:</h4>
-                        <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #1e293b; line-height: 1.5;">
-                          <li><strong>Acceso Premium Ilimitado:</strong> Disfrute sin restricciones de todas las funciones avanzadas, tokens y características PRO de ambas extensiones de manera totalmente gratuita durante un periodo de prueba exclusivo.</li>
-                          <li><strong>Influencia Directa:</strong> Sus opiniones y sugerencias técnicas dictarán el rumbo de las próximas actualizaciones globales de nuestro software.</li>
-                          <li><strong>Soporte Prioritario:</strong> Canal directo con nuestro equipo de ingeniería y producto.</li>
-                        </ul>
-                      </div>
+                      <p style="background-color: #f8fafc; border-left: 3px solid #2563eb; padding: 12px 15px; margin: 20px 0;">
+                        <strong>¿Aceptas ser nuestro Invitado de Honor?</strong><br>
+                        Para activar de inmediato tus credenciales y accesos VIP, simplemente <strong>responde directamente a este correo</strong> escribiendo <strong>"SÍ"</strong> para confirmar o <strong>"NO"</strong> en caso de declinar.
+                      </p>
 
-                      <!-- Bloque de Acción / Confirmación -->
-                      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin: 25px 0;">
-                        <tr>
-                          <td style="padding: 20px; text-align: center;">
-                            <span style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; display: block; margin-bottom: 8px;">¿Acepta ser nuestro Invitado de Honor?</span>
-                            <p style="margin: 0; font-size: 14px; color: #334155;">
-                              Para activar inmediatamente sus credenciales y accesos VIP, simplemente <strong>responda directamente a este correo</strong> indicando:
-                            </p>
-                            <div style="margin-top: 12px; font-size: 15px; font-weight: bold; color: #2563eb;">
-                              👉 Responda "SÍ" para confirmar su participación y configurar su cuenta, o "NO" en caso de declinar.
-                            </div>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <p style="margin-bottom: 0;">Agradecemos de antemano su valioso tiempo y liderazgo. Quedamos a la entera disposición de su respuesta.</p>
-                      <p style="margin-top: 25px; margin-bottom: 0;">Atentamente,<br><strong>Dirección de Producto e Innovación — Copilot.ai</strong></p>
-                    </td>
-                  </tr>
-
-                  <!-- Pie de página -->
-                  <tr>
-                    <td style="background-color: #f8fafc; padding: 20px 30px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0;">
-                      Este es un mensaje institucional exclusivo enviado a través de Copilot.ai. Las respuestas a este correo se canalizan a través de nuestro centro de atención especializado.
+                      <p>Agradecemos de antemano tu tiempo y liderazgo. Quedamos atentos a tu respuesta.</p>
+                      
+                      <p style="margin-top: 30px; margin-bottom: 0;">Un cordial saludo,<br><br><strong>Dirección de Producto e Innovación — Copilot.ai</strong></p>
                     </td>
                   </tr>
 
@@ -740,7 +692,6 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         </html>
         `;
 
-        // Petición a la API de Brevo con remitente corporativo y redirección de respuesta a gmail
         const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
@@ -750,7 +701,7 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
             },
             body: JSON.stringify({
                 sender: {
-                    name: "Copilot.ai",
+                    name: "Copilot.ai Team",
                     email: "copilot.ia@prestigecloser.com"
                 },
                 replyTo: {
@@ -771,7 +722,7 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
 
         return res.status(200).json({ 
             success: true, 
-            message: "Propuesta formal enviada con éxito desde copilot.ia@prestigecloser.com. Las respuestas llegarán a copilot.ia.pro@gmail.com." 
+            message: "Propuesta formal detallada enviada con éxito." 
         });
 
     } catch (error) {
