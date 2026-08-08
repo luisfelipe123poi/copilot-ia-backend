@@ -624,7 +624,7 @@ app.post('/api/crear-checkout', async (req, res) => {
   }
 });
 
-// Endpoint para enviar la propuesta de feedback por correo usando la API de Brevo
+// Endpoint para enviar la propuesta formal e invitación al Invitado de Honor del Programa de Feedback
 app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
     try {
         const { adminSecret, email, nombre } = req.body;
@@ -637,8 +637,8 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
             return res.status(400).json({ success: false, error: "El correo es obligatorio" });
         }
 
-        const nombreUsuario = nombre || "Estimado/a usuario/a";
-        const logoUrl = "https://tu-dominio.com/logo.png"; // Reemplaza con la URL real de tu logo
+        const nombreUsuario = nombre || "Estimado/a Invitado/a de Honor";
+        const logoUrl = "https://tu-dominio.com/logo.png"; // Reemplaza con la URL real de tu logo institucional
 
         const htmlFeedbackPropuesta = `
         <!DOCTYPE html>
@@ -651,7 +651,7 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
           <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
             <tr>
               <td align="center">
-                <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                <table border="0" cellpadding="0" cellspacing="0" width="650" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
                   
                   <!-- Cabecera del Logo -->
                   <tr>
@@ -660,11 +660,11 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
                     </td>
                   </tr>
 
-                  <!-- Franja de Título -->
+                  <!-- Franja de Título Principal -->
                   <tr>
-                    <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
-                      <h1 style="margin: 0; font-size: 20px; font-weight: 700;">Invitación al Programa Exclusivo de Feedback 🚀</h1>
-                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Forme parte de la evolución de nuestras herramientas de automatización</p>
+                    <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px; text-align: center; color: #ffffff;">
+                      <h1 style="margin: 0; font-size: 22px; font-weight: 700;">🌟 Invitación Exclusiva: Invitado de Honor Premium</h1>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Acceso VIP sin costo al Programa de Feedback de Copilot.ai</p>
                     </td>
                   </tr>
 
@@ -673,44 +673,62 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
                     <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
                       <p style="margin-top: 0;">Hola <strong>${nombreUsuario}</strong>,</p>
                       
-                      <p>Nos ponemos en contacto con usted para invitarle de manera exclusiva a formar parte de nuestro <strong>Programa de Feedback de Extensiones</strong> en Copilot.ai.</p>
+                      <p>Nos dirigimos a usted con mucho entusiasmo para extenderle una invitación exclusiva y seleccionada como <strong>Invitado de Honor Premium</strong> en nuestro programa privado de feedback y validación anticipada de tecnología.</p>
                       
-                      <p><strong>¿Para qué sirven nuestras extensiones y en qué le beneficiarán?</strong><br>
-                      Nuestras extensiones están diseñadas para optimizar, automatizar y potenciar la gestión de procesos comerciales y de mensajería (como WhatsApp Sales Copilot), reduciendo drásticamente las tareas manuales y permitiendo escalar la atención y productividad de manera inteligente.</p>
+                      <p>Sabemos que la gestión comercial eficiente es vital. Por ello, hemos desarrollado un ecosistema avanzado de extensiones inteligentes diseñadas para eliminar la fricción operativa y multiplicar drásticamente los cierres de ventas. Durante este programa exclusivo, tendrá acceso total y sin costo a nuestras dos herramientas insignia:</p>
 
+                      <!-- Bloque de Herramienta 1 -->
                       <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
-                        <p style="margin: 0; font-size: 14px; color: #1e293b;">
-                          <strong>¿Qué buscamos en este programa?</strong><br>
-                          Queremos contar con su valiosa opinión probando las nuevas actualizaciones de manera anticipada. Su rol consistirá en utilizar las herramientas en su entorno diario y reportarnos sugerencias, observaciones de rendimiento o mejoras que le gustaría ver integradas.
+                        <h3 style="margin: 0 0 8px 0; color: #1e3a8a; font-size: 16px;">🚀 1. WhatsApp Sales Copilot (Overlay Multicanal)</h3>
+                        <p style="margin: 0; font-size: 14px; color: #334155;">
+                          <strong>¿Qué resuelve?</strong> Automatiza la lectura y comprensión de chats complejos y notas de voz kilométricas de los clientes[cite: 3].<br>
+                          <strong>Ventajas principales:</strong> Transcribe notas de voz de clientes en tiempo real[cite: 3], genera borradores de cierre adaptados por tonos persuasivos (formal, directo, urgente)[cite: 3], inyecta respuestas con un solo clic[cite: 3] y le permite dictar sus propias respuestas de forma ultrarrápida usando inteligencia artificial[cite: 3].
                         </p>
                       </div>
 
-                      <p>A cambio de su participación activa, le otorgaremos acceso prioritario y sin costo a nuestras licencias avanzadas de prueba personalizada.</p>
+                      <!-- Bloque de Herramienta 2 -->
+                      <div style="background-color: #f8fafc; border-left: 4px solid #10b981; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                        <h3 style="margin: 0 0 8px 0; color: #065f46; font-size: 16px;">💼 2. Gmail Sales Copilot (Sincronización Multietiqueta & IA)</h3>
+                        <p style="margin: 0; font-size: 14px; color: #334155;">
+                          <strong>¿Qué resuelve?</strong> Elimina la pérdida de tiempo leyendo hilos interminables de correos electrónicos y simplifica la redacción comercial corporativa[cite: 4].<br>
+                          <strong>Ventajas principales:</strong> Escanea y resume correos extensos al instante[cite: 4], redacta respuestas o propuestas comerciales desde cero utilizando plantillas preestablecidas (ventas, cotizaciones, alianzas)[cite: 4] e integra un sistema de dictado inteligente multicampo mediante voz[cite: 4].
+                        </p>
+                      </div>
 
-                      <!-- Bloque de Acción / Respuesta -->
+                      <!-- Beneficios del Programa -->
+                      <div style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 100%, rgba(16, 185, 129, 0.08)); border: 1px solid #bfdbfe; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                        <h4 style="margin: 0 0 10px 0; color: #1e40af; font-size: 15px; text-transform: uppercase;">🎁 Beneficios de su Membresía VIP:</h4>
+                        <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #1e293b; line-height: 1.5;">
+                          <li><strong>Acceso Premium Ilimitado:</strong> Disfrute sin restricciones de todas las funciones avanzadas, tokens y características PRO de ambas extensiones de manera totalmente gratuita durante un periodo de prueba exclusivo.</li>
+                          <li><strong>Influencia Directa:</strong> Sus opiniones y sugerencias técnicas dictarán el rumbo de las próximas actualizaciones globales de nuestro software.</li>
+                          <li><strong>Soporte Prioritario:</strong> Canal directo con nuestro equipo de ingeniería y producto.</li>
+                        </ul>
+                      </div>
+
+                      <!-- Bloque de Acción / Confirmación -->
                       <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin: 25px 0;">
                         <tr>
                           <td style="padding: 20px; text-align: center;">
-                            <span style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; display: block; margin-bottom: 8px;">¿Desea participar en el programa?</span>
+                            <span style="font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; display: block; margin-bottom: 8px;">¿Acepta ser nuestro Invitado de Honor?</span>
                             <p style="margin: 0; font-size: 14px; color: #334155;">
-                              Por favor, simplemente <strong>responda a este correo</strong> indicándonos claramente:
+                              Para activar inmediatamente sus credenciales y accesos VIP, simplemente <strong>responda directamente a este correo</strong> indicando:
                             </p>
                             <div style="margin-top: 12px; font-size: 15px; font-weight: bold; color: #2563eb;">
-                              👉 Responda "SÍ" para activar su cuenta o "NO" en caso de declinar.
+                              👉 Responda "SÍ" para confirmar su participación y configurar su cuenta, o "NO" en caso de declinar.
                             </div>
                           </td>
                         </tr>
                       </table>
 
-                      <p style="margin-bottom: 0;">Quedamos atentos a su confirmación para proceder con la creación de su perfil personalizado.</p>
-                      <p style="margin-top: 20px; margin-bottom: 0;">Atentamente,<br><strong>Equipo de Ingeniería y Producto - Copilot.ai</strong></p>
+                      <p style="margin-bottom: 0;">Agradecemos de antemano su valioso tiempo y liderazgo. Quedamos a la entera disposición de su respuesta.</p>
+                      <p style="margin-top: 25px; margin-bottom: 0;">Atentamente,<br><strong>Dirección de Producto e Innovación — Copilot.ai</strong></p>
                     </td>
                   </tr>
 
                   <!-- Pie de página -->
                   <tr>
                     <td style="background-color: #f8fafc; padding: 20px 30px; text-align: center; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0;">
-                      Este es un mensaje automático enviado desde el panel de administración de Copilot.ai.
+                      Este es un mensaje institucional exclusivo enviado a través de Copilot.ai. Las respuestas a este correo se canalizan a través de nuestro centro de atención especializado.
                     </td>
                   </tr>
 
@@ -722,7 +740,7 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         </html>
         `;
 
-        // Petición a la API de Brevo con tu remitente corporativo fijo
+        // Petición a la API de Brevo con remitente corporativo y redirección de respuesta a gmail
         const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
             method: "POST",
             headers: {
@@ -735,8 +753,12 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
                     name: "Copilot.ai",
                     email: "copilot.ia@prestigecloser.com"
                 },
+                replyTo: {
+                    email: "copilot.ia.pro@gmail.com",
+                    name: "Copilot.ai Feedback VIP"
+                },
                 to: [{ email: email, name: nombreUsuario }],
-                subject: "Invitación Exclusiva: Programa de Feedback Copilot.ai",
+                subject: "Invitación VIP: Invitado de Honor Programa de Feedback Copilot.ai",
                 htmlContent: htmlFeedbackPropuesta
             })
         });
@@ -744,12 +766,12 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         const brevoData = await brevoResponse.json();
 
         if (!brevoResponse.ok) {
-            throw new Error(brevoData.message || "Error al enviar el correo mediante Brevo");
+            throw new Error(brevoData.message || "Error al enviar el correo mediante la API de Brevo");
         }
 
         return res.status(200).json({ 
             success: true, 
-            message: "Correo de propuesta formal enviado con éxito a través de Brevo." 
+            message: "Propuesta formal enviada con éxito desde copilot.ia@prestigecloser.com. Las respuestas llegarán a copilot.ia.pro@gmail.com." 
         });
 
     } catch (error) {
@@ -757,7 +779,6 @@ app.post('/api/admin/enviar-propuesta-feedback', async (req, res) => {
         return res.status(500).json({ success: false, error: error.message });
     }
 });
-
 // ==========================================
 // ENDPOINT 1: Analizar Intención en Segundo Plano (Clasificación)
 // ==========================================
