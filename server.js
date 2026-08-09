@@ -1077,6 +1077,28 @@ ${instruccionTono ? `TONO DE COMUNICACIÓN: ${instruccionTono}` : ''}
   }
 });
 
+// GENERAR IMAGEN CON IA (DALL-E 3)
+app.post('/api/ai/generate-image', async (req, res) => {
+    try {
+        const { promptUsuario } = req.body;
+
+        const response = await openai.images.generate({
+            model: "dall-e-3",
+            prompt: `Diseño gráfico corporativo y comercial profesional, estilo moderno e impecable para propuesta comercial: ${promptUsuario}`,
+            n: 1,
+            size: "1024x1024",
+            response_format: "url"
+        });
+
+        const imageUrl = response.data[0].url;
+        res.json({ success: true, url: imageUrl });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al generar la imagen con IA' });
+    }
+});
+
 // ==========================================
 // ENDPOINT NUEVO: Resumir Correo Electrónico
 // ==========================================
