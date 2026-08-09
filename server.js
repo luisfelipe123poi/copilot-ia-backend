@@ -587,6 +587,39 @@ app.post('/api/generar-system-prompt', async (req, res) => {
   }
 });
 
+const { fal } = require("@fal-ai/serverless");
+
+// Configura tu API key de fal en las variables de entorno (.env) como FAL_KEY=tu_api_key
+
+app.post('/api/ai/generate-image-fal', async (req, res) => {
+    try {
+        const { promptUsuario } = req.body;
+
+        // Usando el modelo Flux de fal.ai (altísima velocidad y calidad fotográfica/gráfica)
+        const result = await fal.subscribe("fal-ai/flux/schnell", {
+            input: {
+                prompt: `Diseño corporativo profesional y moderno: ${promptUsuario}`,
+                image_size: "square_hd",
+                num_inference_steps: 4,
+                enable_safety_checker: true
+            },
+            logs: true,
+            onQueueUpdate: (update) => {
+                if (update.status === "IN_PROGRESS") {
+                    console.log("Generando imagen en fal.ai...");
+                }
+            },
+        });
+
+        const imageUrl = result.data.images[0].url;
+        res.json({ success: true, url: imageUrl });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Error al generar la imagen con fal.ai' });
+    }
+});
+
 // ==========================================
 // ENDPOINT PASARELA DE PAGOS: Crear Suscripción Recurrente (Mercado Pago Preapproval)
 // ==========================================
