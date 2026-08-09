@@ -587,7 +587,7 @@ app.post('/api/generar-system-prompt', async (req, res) => {
   }
 });
 
-const { fal } = require("@fal-ai/serverless");
+import { fal } from "@fal-ai/serverless";
 
 // Configura tu API key de fal en las variables de entorno (.env) como FAL_KEY=tu_api_key
 
