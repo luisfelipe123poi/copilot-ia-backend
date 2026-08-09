@@ -8,7 +8,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@fal-ai/client": "^1.0.0",
+    
     "@paypal/checkout-server-sdk": "^1.0.3",
     "axios": "^1.x.x",
     "node-cron": "^3.0.3",
