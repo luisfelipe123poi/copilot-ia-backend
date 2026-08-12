@@ -1899,14 +1899,14 @@ app.post('/api/crear-preferencia-mp', async (req, res) => {
     const { email, plan } = req.body;
     
     // 1. Definir precios y límites según el plan elegido
-    let precioUSD = 10; // Plan Starter por defecto ($10 USD / mes)[cite: 4]
+    let precioUSD = 1; // Plan Starter por defecto ($10 USD / mes)[cite: 4]
     let frecuencia = 1;
     let frecuenciaTipo = 'months';
     let limiteRespuestasDia = 200;
     let incluyeAudio = false;
 
     if (plan === 'pro') {
-      precioUSD = 59; // Plan Pro / Completo ($59 USD / mes)[cite: 4]
+      precioUSD = 1; // Plan Pro / Completo ($59 USD / mes)[cite: 4]
       frecuencia = 1;
       frecuenciaTipo = 'months';
       limiteRespuestasDia = 999999; // Ilimitado[cite: 4]
