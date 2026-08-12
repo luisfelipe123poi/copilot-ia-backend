@@ -2228,6 +2228,51 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
   }
 });
 
+// ENDPOINT DE PRUEBA MANUAL (Borrar o comentar después de probar)
+app.get('/api/test-proceso-pago', async (req, res) => {
+  try {
+    const emailPrueba = "adriel.dul.music@gmail.com"; // El correo donde quieres recibir la prueba
+    const empresaPrueba = "plus";
+    const newLicenseKey = generateLicenseKey('B2B');
+    
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 35);
+
+    // 1. Guardar en MongoDB
+    const nuevaLicenciaCorporativa = new License({
+      licenseKey: newLicenseKey,
+      status: 'active',
+      plan: `Empresarial B2B - ${empresaPrueba} (1 Cuentas)`,
+      usageCount: 0,
+      tokensUsados: 0,
+      limiteTokens: 999999,
+      maxActivations: 1,
+      currentActivations: 0,
+      email: emailPrueba,
+      expiresAt,
+      preapprovalId: "TEST_MANUAL_123"
+    });
+
+    await nuevaLicenciaCorporativa.save();
+
+    // 2. Enviar correo con Brevo
+    const htmlB2B = `
+      <div style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2>¡Prueba de Automatización Exitosa! 🎉</h2>
+        <p>Esta es una simulación del correo B2B para la empresa <strong>${empresaPrueba}</strong>.</p>
+        <p>Tu clave de licencia generada es:</p>
+        <h3 style="color: #2563eb;">${newLicenseKey}</h3>
+      </div>
+    `;
+    
+    await enviarCorreoBrevo(emailPrueba, newLicenseKey, `Prueba Exitosa B2B - ${empresaPrueba}`, htmlB2B);
+
+    res.json({ success: true, message: "Licencia creada y correo de prueba enviado con éxito.", licenseKey: newLicenseKey });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/validar-licencia', async (req, res) => {
   try {
     const rawLicenseKey = req.headers['x-user-license'];
