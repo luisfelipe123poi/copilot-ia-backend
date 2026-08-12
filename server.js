@@ -2030,13 +2030,13 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
 
       if (subscriptionInfo) {
         const payerEmail = subscriptionInfo.payer_email;
-        const status = subscriptionInfo.status; // 'authorized', 'paused', 'cancelled', etc.
+        const status = subscriptionInfo.status; // 'authorized', 'pending', 'paused', 'cancelled', etc.
         
         // Correo del administrador/dueño de la empresa
         const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'tu_correo_admin@ejemplo.com';
 
-        // 1. SI ESTÁ AUTORIZADO (PAGO EXITOSO O NUEVA SUSCRIPCIÓN)
-        if (status === 'authorized') {
+        // 1. FLEXIBILIDAD DE ESTADO: Procesamos si está autorizado, pendiente inicial o si llega un pago exitoso
+        if (status === 'authorized' || status === 'pending' || event.type === 'payment') {
           const expiresAt = new Date();
           expiresAt.setDate(expiresAt.getDate() + 35); // Extiende 35 días
 
@@ -2051,90 +2051,98 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
           }
 
           if (datosB2B && datosB2B.tipo === 'b2b') {
-            // 🏢 CASO B2B: Generar Licencia Matriz con Múltiples Activaciones
-            const newLicenseKey = generateLicenseKey('B2B');
-            const nuevaLicenciaCorporativa = new License({
-              licenseKey: newLicenseKey,
-              status: 'active',
-              plan: `Empresarial B2B - ${datosB2B.empresaNombre} (${datosB2B.cantidadLicencias} Cuentas)`,
-              usageCount: 0,
-              tokensUsados: 0,
-              limiteTokens: 999999,
-              maxActivations: Number(datosB2B.cantidadLicencias),
-              currentActivations: 0,
-              email: payerEmail || 'suscriptor_b2b@local',
-              expiresAt
-            });
+            // 🛡️ PROTECCIÓN DUPLICADOS: Verificar si ya existe una licencia registrada con este preapprovalId
+            let licenciaExistente = await License.findOne({ preapprovalId: preapprovalId });
 
-            await nuevaLicenciaCorporativa.save();
-            console.log(`✅ [WEBHOOK B2B] Licencia corporativa creada para ${datosB2B.empresaNombre} -> Key: ${newLicenseKey} (${datosB2B.cantidadLicencias} puestos)`);
+            if (licenciaExistente) {
+              console.log(`⚠️ [WEBHOOK B2B] La suscripción ${preapprovalId} ya había sido procesada previamente. Ignorando duplicado.`);
+            } else {
+              // 🏢 CASO B2B: Generar Licencia Matriz con Múltiples Activaciones
+              const newLicenseKey = generateLicenseKey('B2B');
+              const nuevaLicenciaCorporativa = new License({
+                licenseKey: newLicenseKey,
+                status: 'active',
+                plan: `Empresarial B2B - ${datosB2B.empresaNombre} (${datosB2B.cantidadLicencias} Cuentas)`,
+                usageCount: 0,
+                tokensUsados: 0,
+                limiteTokens: 999999,
+                maxActivations: Number(datosB2B.cantidadLicencias),
+                currentActivations: 0,
+                email: payerEmail || 'suscriptor_b2b@local',
+                expiresAt,
+                preapprovalId: preapprovalId // Guardamos el ID para bloquear duplicados futuros
+              });
 
-            // 📧 ENVÍO DE CORREO CORPORATIVO AL CLIENTE B2B
-            if (payerEmail && payerEmail !== 'suscriptor_b2b@local') {
-              const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk';
+              await nuevaLicenciaCorporativa.save();
+              console.log(`✅ [WEBHOOK B2B] Licencia corporativa creada para ${datosB2B.empresaNombre} -> Key: ${newLicenseKey} (${datosB2B.cantidadLicencias} puestos)`);
 
-              const htmlB2B = `
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                  <meta charset="UTF-8">
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                </head>
-                <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
-                    <tr>
-                      <td align="center">
-                        <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
-                          <tr>
-                            <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
-                              <img src="${logoUrl}" alt="Copilot.ai" width="350" style="display: block; border: 0; max-width: 90%; height: auto;">
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
-                              <h1 style="margin: 0; font-size: 22px; font-weight: 700;">Suscripción Empresarial B2B Activada 🏢</h1>
-                              <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Acceso corporativo asignado para <strong>${datosB2B.empresaNombre}</strong></p>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
-                              <p style="margin-top: 0;">Estimado equipo de <strong>${datosB2B.empresaNombre}</strong>,</p>
-                              <p>Confirmamos que su pago de suscripción corporativa se ha procesado con éxito.</p>
-                              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 25px 0;">
-                                <tr>
-                                  <td style="padding: 20px; text-align: center;">
-                                    <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Clave de Licencia Matriz B2B</span>
-                                    <div style="background-color: #ffffff; border: 2px dashed #2563eb; border-radius: 6px; padding: 12px 20px; font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: bold; color: #1e40af; letter-spacing: 3px; margin: 12px 0;">
-                                      ${newLicenseKey}
-                                    </div>
-                                    <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
-                                      👥 <strong>Capacidad corporativa:</strong> ${datosB2B.cantidadLicencias} puestos de trabajo
-                                    </div>
-                                  </td>
-                                </tr>
-                              </table>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </body>
-                </html>
+              // 📧 ENVÍO DE CORREO CORPORATIVO AL CLIENTE B2B
+              if (payerEmail && payerEmail !== 'suscriptor_b2b@local') {
+                const logoUrl = process.env.LOGO_URL || 'https://lh3.googleusercontent.com/d/1GtxY0-91lcxLod1uEqtQCpVJSdWInUgk';
+
+                const htmlB2B = `
+                  <!DOCTYPE html>
+                  <html lang="es">
+                  <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  </head>
+                  <body style="margin: 0; padding: 0; background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f4f6f9; padding: 30px 0;">
+                      <tr>
+                        <td align="center">
+                          <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                            <tr>
+                              <td align="center" style="background-color: #0f172a; padding: 25px 20px;">
+                                <img src="${logoUrl}" alt="Copilot.ai" width="350" style="display: block; border: 0; max-width: 90%; height: auto;">
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 25px 30px; text-align: center; color: #ffffff;">
+                                <h1 style="margin: 0; font-size: 22px; font-weight: 700;">Suscripción Empresarial B2B Activada 🏢</h1>
+                                <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Acceso corporativo asignado para <strong>${datosB2B.empresaNombre}</strong></p>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 35px 30px; color: #334155; font-size: 15px; line-height: 1.6;">
+                                <p style="margin-top: 0;">Estimado equipo de <strong>${datosB2B.empresaNombre}</strong>,</p>
+                                <p>Confirmamos que su pago de suscripción corporativa se ha procesado con éxito.</p>
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 25px 0;">
+                                  <tr>
+                                    <td style="padding: 20px; text-align: center;">
+                                      <span style="font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase;">Clave de Licencia Matriz B2B</span>
+                                      <div style="background-color: #ffffff; border: 2px dashed #2563eb; border-radius: 6px; padding: 12px 20px; font-family: 'Courier New', Courier, monospace; font-size: 22px; font-weight: bold; color: #1e40af; letter-spacing: 3px; margin: 12px 0;">
+                                        ${newLicenseKey}
+                                      </div>
+                                      <div style="font-size: 13px; color: #64748b; margin-top: 5px;">
+                                        👥 <strong>Capacidad corporativa:</strong> ${datosB2B.cantidadLicencias} puestos de trabajo
+                                      </div>
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </body>
+                  </html>
+                `;
+                await enviarCorreoBrevo(payerEmail, newLicenseKey, `Tu Licencia Corporativa B2B - ${datosB2B.empresaNombre} 🚀`, htmlB2B);
+              }
+
+              // 📩 NOTIFICACIÓN PARA EL DUEÑO/ADMINISTRADOR (COMPRA B2B)
+              const htmlAdminB2B = `
+                <h2>🎉 ¡Nueva Compra B2B Recibida!</h2>
+                <p><strong>Empresa:</strong> ${datosB2B.empresaNombre}</p>
+                <p><strong>Email Comprador:</strong> ${payerEmail}</p>
+                <p><strong>Puestos Contratados:</strong> ${datosB2B.cantidadLicencias}</p>
+                <p><strong>Licencia Generada:</strong> ${newLicenseKey}</p>
+                <p><strong>ID de Suscripción MP:</strong> ${preapprovalId}</p>
               `;
-              await enviarCorreoBrevo(payerEmail, newLicenseKey, `Tu Licencia Corporativa B2B - ${datosB2B.empresaNombre} 🚀`, htmlB2B);
+              await enviarCorreoBrevo(ADMIN_EMAIL, newLicenseKey, `🚨 [NUEVA VENTA B2B] ${datosB2B.empresaNombre}`, htmlAdminB2B);
             }
-
-            // 📩 NOTIFICACIÓN PARA EL DUEÑO/ADMINISTRADOR (COMPRA B2B)
-            const htmlAdminB2B = `
-              <h2>🎉 ¡Nueva Compra B2B Recibida!</h2>
-              <p><strong>Empresa:</strong> ${datosB2B.empresaNombre}</p>
-              <p><strong>Email Comprador:</strong> ${payerEmail}</p>
-              <p><strong>Puestos Contratados:</strong> ${datosB2B.cantidadLicencias}</p>
-              <p><strong>Licencia Generada:</strong> ${newLicenseKey}</p>
-              <p><strong>ID de Suscripción MP:</strong> ${preapprovalId}</p>
-            `;
-            await enviarCorreoBrevo(ADMIN_EMAIL, newLicenseKey, `🚨 [NUEVA VENTA B2B] ${datosB2B.empresaNombre}`, htmlAdminB2B);
 
           } else {
             // 👤 CASO INDIVIDUAL
@@ -2144,6 +2152,7 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
               usuario.status = 'active';
               usuario.plan = 'Pro (Mercado Pago)';
               usuario.expiresAt = expiresAt;
+              usuario.preapprovalId = preapprovalId;
               await usuario.save();
               console.log(`✅ Suscripción renovada/activada para: ${payerEmail}`);
 
@@ -2157,33 +2166,37 @@ app.post('/api/webhook-mercadopago', async (req, res) => {
               await enviarCorreoBrevo(ADMIN_EMAIL, usuario.licenseKey, `🔄 [RENOVACIÓN PLAN PRO] ${payerEmail}`, htmlAdminRenovacion);
 
             } else {
-              const newLicenseKey = generateLicenseKey('PRES');
-              await License.create({
-                licenseKey: newLicenseKey,
-                status: 'active',
-                plan: 'Pro (Mercado Pago)',
-                usageCount: 0,
-                tokensUsados: 0,
-                limiteTokens: 999999,
-                email: payerEmail || 'suscriptor_mercadopago@local',
-                expiresAt
-              });
-              console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
-              
-              // 📧 ENVÍO DE CORREO AL CLIENTE INDIVIDUAL
-              if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
-                await enviarCorreoBrevo(payerEmail, newLicenseKey);
-              }
+              let licenciaExistentePorSub = await License.findOne({ preapprovalId: preapprovalId });
+              if (!licenciaExistentePorSub) {
+                const newLicenseKey = generateLicenseKey('PRES');
+                await License.create({
+                  licenseKey: newLicenseKey,
+                  status: 'active',
+                  plan: 'Pro (Mercado Pago)',
+                  usageCount: 0,
+                  tokensUsados: 0,
+                  limiteTokens: 999999,
+                  email: payerEmail || 'suscriptor_mercadopago@local',
+                  expiresAt,
+                  preapprovalId: preapprovalId
+                });
+                console.log(`✅ Nueva licencia creada para: ${payerEmail} -> Key: ${newLicenseKey}`);
+                
+                // 📧 ENVÍO DE CORREO AL CLIENTE INDIVIDUAL
+                if (payerEmail && payerEmail !== 'suscriptor_mercadopago@local') {
+                  await enviarCorreoBrevo(payerEmail, newLicenseKey);
+                }
 
-              // 📩 NOTIFICACIÓN PARA EL DUEÑO/ADMINISTRADOR (NUEVA COMPRA INDIVIDUAL)
-              const htmlAdminNuevo = `
-                <h2>💰 ¡Nueva Suscripción Individual Recibida!</h2>
-                <p><strong>Cliente:</strong> ${payerEmail}</p>
-                <p><strong>Plan:</strong> Pro (Mercado Pago)</p>
-                <p><strong>Licencia Asignada:</strong> ${newLicenseKey}</p>
-                <p><strong>ID de Suscripción MP:</strong> ${preapprovalId}</p>
-              `;
-              await enviarCorreoBrevo(ADMIN_EMAIL, newLicenseKey, `🎉 [NUEVA VENTA PRO] ${payerEmail}`, htmlAdminNuevo);
+                // 📩 NOTIFICACIÓN PARA EL DUEÑO/ADMINISTRADOR (NUEVA COMPRA INDIVIDUAL)
+                const htmlAdminNuevo = `
+                  <h2>💰 ¡Nueva Suscripción Individual Recibida!</h2>
+                  <p><strong>Cliente:</strong> ${payerEmail}</p>
+                  <p><strong>Plan:</strong> Pro (Mercado Pago)</p>
+                  <p><strong>Licencia Asignada:</strong> ${newLicenseKey}</p>
+                  <p><strong>ID de Suscripción MP:</strong> ${preapprovalId}</p>
+                `;
+                await enviarCorreoBrevo(ADMIN_EMAIL, newLicenseKey, `🎉 [NUEVA VENTA PRO] ${payerEmail}`, htmlAdminNuevo);
+              }
             }
           }
         } 
