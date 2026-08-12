@@ -1,5 +1,5 @@
 // ==========================================
-// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo) 
+// AI Copilot Universal - Backend Completo (Node.js / Express + MongoDB + Mercado Pago + Brevo)  
 // ==========================================
 
 import express from 'express';
